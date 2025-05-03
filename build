@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Determine script directory and switch to it
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
+cd "$SCRIPT_DIR"
+
+# Installation directory (default: /usr/local/bin)
+INSTALL_DIR="${1:-/usr/local/bin}"
+BIN_NAME=claudex
+
+echo "⏳  Building ${BIN_NAME}…"
+command -v go >/dev/null || { echo "❌  Go is not installed"; exit 1; }
+go mod tidy
+go build -o "$BIN_NAME"
+
+echo "🚚  Installing to ${INSTALL_DIR}"
+if [[ -w "$INSTALL_DIR" ]]; then
+  mv "$BIN_NAME" "$INSTALL_DIR/"
+else
+  sudo mv "$BIN_NAME" "$INSTALL_DIR/"
+fi
+
+echo "✅  Installed ${BIN_NAME} to ${INSTALL_DIR}"
