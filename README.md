@@ -22,15 +22,15 @@ Option 2: From source
 ```bash
 git clone https://github.com/photodialectic/claudex.git
 cd claudex
-./build [install_dir]   # default: /usr/local/bin
+./install [install_dir]   # default: /usr/local/bin
 ```
 
 Ensure `$GOPATH/bin` or `$GOBIN` is in your `PATH` if you used `go install`.
 
-### Install or update container image
+### Build or update container image
 
 ```bash
-claudex install
+claudex build
 ```
 
 Alternatively, to manually build the Docker image:
@@ -48,14 +48,14 @@ claudex [DIR1 DIR2 ...]
 ```
 
 - Mounts each `DIRi` at `/workspace/<basename(DIRi)>` inside the container.
-- If no directories are provided, mounts the current directory.
+- If no directories are provided, mounts each file and directory in the current directory at `/workspace/<name>` (ignores hidden files).
 - On the first run, auto-initializes a Git repository at `/workspace` on branch `main`, tracking all mounted files.
-- Optionally, mount an instructions file or directory during startup.
+- Optionally, mount an instructions file or directory during startup. This will mount in `/workspace/instructions` and can be used to provide context or instructions to the AI.
 
 Examples:
 
 ```bash
-# Mount current directory
+# Mount current directory and files (excluding hidden files)
 claudex
 
 # Mount multiple service folders
