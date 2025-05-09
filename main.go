@@ -80,9 +80,9 @@ func promptPath(prompt string) (string, error) {
 func main() {
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
-		case "install":
-			if err := install(); err != nil {
-				log.Fatalf("install failed: %v", err)
+		case "build":
+			if err := build(); err != nil {
+				log.Fatalf("build failed: %v", err)
 			}
 			return
 		case "-h", "--help", "help":
@@ -100,13 +100,13 @@ func usage() {
 	fmt.Printf(`Usage: %s [DIR1 DIR2 ...]
 
 Mounts each DIRi at /workspace/<basename(DIRi)> in the claudex container.
-If no DIR is provided, mounts the current directory at /workspace.
+If no DIR is provided, mounts each file and directory in the current directory at /workspace/<name>.
 Examples:
   %s
   %s service1/ service2/
 
-Install or update the Docker image:
-  %s install
+Build or updates the Docker image:
+  %s build
 `, prog, prog, prog, prog)
 	os.Exit(0)
 }
@@ -136,15 +136,15 @@ func prepareBuildContext() (string, error) {
 	return tmpDir, nil
 }
 
-// install builds or updates the claudex Docker image.
-func install() error {
+//  build or updates the claudex Docker image.
+func build() error {
 	fmt.Println("Building/updating the claudex container image...")
 	ctxDir, err := prepareBuildContext()
 	if err != nil {
 		return err
 	}
 	defer os.RemoveAll(ctxDir)
-	cmd := exec.Command("docker", "build", "-t", "claudex", ctxDir)
+	cmd := exec.Command("docker", "build", "--no-cache", "-t", "claudex", ctxDir)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
@@ -183,7 +183,19 @@ func runCli(args []string) error {
 		if err != nil || !fi.IsDir() {
 			return fmt.Errorf("'%s' is not a directory", abs)
 		}
-		mounts = append(mounts, "-v", fmt.Sprintf("%s:/workspace", abs))
+		entries, err := os.ReadDir(abs)
+		if err != nil {
+			return fmt.Errorf("cannot read directory: %s", abs)
+		}
+		for _, e := range entries {
+			name := e.Name()
+			// Skip dot files
+			if name[0] == '.' {
+				continue
+			}
+			path := filepath.Join(abs, name)
+			mounts = append(mounts, "-v", fmt.Sprintf("%s:/workspace/%s", path, name))
+		}
 	} else {
 		for _, d := range args {
 			abs, err := filepath.Abs(d)
@@ -219,12 +231,12 @@ func runCli(args []string) error {
 				return fmt.Errorf("'%s' does not exist", abs)
 			}
 			if fi.IsDir() {
-				mounts = append(mounts, "-v", fmt.Sprintf("%s:/home/node/instructions", abs))
-				fmt.Printf("Mounted instructions directory: %s -> /home/node/instructions\n", abs)
+				mounts = append(mounts, "-v", fmt.Sprintf("%s:/workspace/instructions", abs))
+				fmt.Printf("Mounted instructions directory: %s -> /workspace/instructions\n", abs)
 			} else {
 				name := filepath.Base(abs)
-				mounts = append(mounts, "-v", fmt.Sprintf("%s:/home/node/instructions/%s", abs, name))
-				fmt.Printf("Mounted instructions file: %s -> /home/node/instructions/%s\n", abs, name)
+				mounts = append(mounts, "-v", fmt.Sprintf("%s:/workspace/instructions/%s", abs, name))
+				fmt.Printf("Mounted instructions file: %s -> /workspace/instructions/%s\n", abs, name)
 			}
 		}
 	}
