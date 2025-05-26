@@ -30,6 +30,7 @@ for domain in \
     "registry.npmjs.org" \
     "api.anthropic.com" \
     "sentry.io" \
+    "www.nickhedberg.com" \
     "statsig.anthropic.com" \
     "statsig.com"; do
     echo "Resolving $domain..."
