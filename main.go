@@ -136,7 +136,7 @@ func prepareBuildContext() (string, error) {
 	return tmpDir, nil
 }
 
-//  build or updates the claudex Docker image.
+// build or updates the claudex Docker image.
 func build() error {
 	fmt.Println("Building/updating the claudex container image...")
 	ctxDir, err := prepareBuildContext()
@@ -169,6 +169,14 @@ func runCli(args []string) error {
 		fmt.Fprintf(os.Stderr, "Warning: %s not found; proceeding without it.\n", claudeJson)
 	}
 
+	// Mount OpenAI config directory if it exists
+	openaiConfigDir := filepath.Join(home, ".codex")
+	if fi, err := os.Stat(openaiConfigDir); err == nil && fi.IsDir() {
+		mounts = append(mounts, "-v", fmt.Sprintf("%s:/home/node/.codex", openaiConfigDir))
+	} else {
+		fmt.Fprintf(os.Stderr, "Warning: %s not found or not a directory; proceeding without it.\n", openaiConfigDir)
+	}
+
 	// Mount workspace directories
 	if len(args) == 0 {
 		cwd, err := os.Getwd()
@@ -189,8 +197,8 @@ func runCli(args []string) error {
 		}
 		for _, e := range entries {
 			name := e.Name()
-			// Skip dot files
-			if name[0] == '.' {
+			// Skip git and env dotfiles
+			if strings.HasPrefix(name, ".env") || name == ".git" {
 				continue
 			}
 			path := filepath.Join(abs, name)
@@ -267,7 +275,7 @@ func runCli(args []string) error {
 	exec.Command("docker", "rm", "-f", "claudex").Run()
 
 	// Run the container in detached mode
-	runArgs := []string{"run", "--name", "claudex", "-d", "-e", "OPENAI_API_KEY", "--cap-add", "NET_ADMIN", "--cap-add", "NET_RAW"}
+	runArgs := []string{"run", "--name", "claudex", "-d", "-e", "OPENAI_API_KEY", "-e", "AI_API_MK", "--cap-add", "NET_ADMIN", "--cap-add", "NET_RAW"}
 	runArgs = append(runArgs, mounts...)
 	runArgs = append(runArgs, "claudex", "sleep", "infinity")
 	cmdRun := exec.Command("docker", runArgs...)
