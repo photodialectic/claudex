@@ -22,6 +22,7 @@ RUN apt update && apt install -y less \
   jq \
   ripgrep \
   fd-find \
+  socat \
   tree
 
 # Ensure default node user has access to /usr/local/share
@@ -39,9 +40,9 @@ RUN SNIPPET="export PROMPT_COMMAND='history -a' && export HISTFILE=/commandhisto
 # Set `DEVCONTAINER` environment variable to help with orientation
 ENV DEVCONTAINER=true
 
-# Create workspace, config, and instructions directories and set permissions
-RUN mkdir -p /workspace /home/node/.claude /home/node/instructions && \
-  chown -R node:node /workspace /home/node/.claude /home/node/instructions
+# Create workspace, context, config, and instructions directories and set permissions
+RUN mkdir -p /workspace /context /home/node/.claude /home/node/instructions && \
+  chown -R node:node /workspace /context /home/node/.claude /home/node/instructions
 
 WORKDIR /workspace
 
@@ -74,6 +75,9 @@ RUN npm install -g @anthropic-ai/claude-code
 
 # Install Codex
 RUN npm install -g @openai/codex
+
+# Install Gemini
+RUN npm install -g @google/gemini-cli
 
 # Copy and set up firewall script
 COPY init-firewall.sh /usr/local/bin/

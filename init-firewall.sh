@@ -29,6 +29,7 @@ for domain in \
     "api.openai.com" \
     "registry.npmjs.org" \
     "api.anthropic.com" \
+    "generativelanguage.googleapis.com" \
     "sentry.io" \
     "www.nickhedberg.com" \
     "statsig.anthropic.com" \
