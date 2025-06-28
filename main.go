@@ -85,6 +85,11 @@ func main() {
 				log.Fatalf("build failed: %v", err)
 			}
 			return
+		case "include":
+			if err := includeCommand(os.Args[2:]); err != nil {
+				log.Fatalf("include failed: %v", err)
+			}
+			return
 		case "-h", "--help", "help":
 			usage()
 			return
@@ -97,18 +102,73 @@ func main() {
 
 func usage() {
 	prog := filepath.Base(os.Args[0])
-	fmt.Printf(`Usage: %s [DIR1 DIR2 ...]
+	fmt.Printf(`Usage: %s [--host-network] [DIR1 DIR2 ...]
 
 Mounts each DIRi at /workspace/<basename(DIRi)> in the claudex container.
 If no DIR is provided, mounts each file and directory in the current directory at /workspace/<name>.
+
+Options:
+  --host-network    Use host networking (allows OAuth callbacks)
+
 Examples:
   %s
   %s service1/ service2/
+  %s --host-network
 
 Build or updates the Docker image:
   %s build
-`, prog, prog, prog, prog)
+
+Include files/directories in a running container:
+  %s include <file_or_directory>
+`, prog, prog, prog, prog, prog, prog)
 	os.Exit(0)
+}
+
+// includeCommand copies a file or directory to the /context directory in the claudex container.
+func includeCommand(args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("usage: claudex include <file_or_directory> [file_or_directory...]")
+	}
+
+	// Check if claudex container is running once
+	cmd := exec.Command("docker", "ps", "-q", "-f", "name=claudex")
+	out, err := cmd.Output()
+	if err != nil {
+		return fmt.Errorf("failed to check container status: %w", err)
+	}
+	if len(bytes.TrimSpace(out)) == 0 {
+		return fmt.Errorf("claudex container is not running. Start it first with 'claudex'")
+	}
+
+	// Process each argument
+	for _, source := range args {
+		abs, err := filepath.Abs(source)
+		if err != nil {
+			return fmt.Errorf("invalid path: %s", source)
+		}
+
+		if _, err := os.Stat(abs); err != nil {
+			return fmt.Errorf("'%s' does not exist", abs)
+		}
+
+		// Use docker cp to copy the file/directory
+		basename := filepath.Base(abs)
+		destPath := fmt.Sprintf("claudex:/context/%s", basename)
+
+		fmt.Printf("Including %s at /context/%s...\n", abs, basename)
+
+		cpCmd := exec.Command("docker", "cp", abs, destPath)
+		cpCmd.Stdout = os.Stdout
+		cpCmd.Stderr = os.Stderr
+
+		if err := cpCmd.Run(); err != nil {
+			return fmt.Errorf("docker cp failed for %s: %w", abs, err)
+		}
+
+		fmt.Printf("Successfully included %s at /context/%s\n", abs, basename)
+	}
+
+	return nil
 }
 
 //go:embed Dockerfile init-firewall.sh
@@ -155,6 +215,23 @@ func build() error {
 
 // runCli handles the container setup and shell attachment.
 func runCli(args []string) error {
+	// Check for --host-network flag before filtering
+	var useHostNetwork bool
+	for _, arg := range args {
+		if arg == "--host-network" {
+			useHostNetwork = true
+			break
+		}
+	}
+
+	// Filter out --host-network flag for Docker args
+	var filteredArgs []string
+	for _, arg := range args {
+		if arg != "--host-network" {
+			filteredArgs = append(filteredArgs, arg)
+		}
+	}
+	args = filteredArgs
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return err
@@ -169,12 +246,14 @@ func runCli(args []string) error {
 		fmt.Fprintf(os.Stderr, "Warning: %s not found; proceeding without it.\n", claudeJson)
 	}
 
-	// Mount OpenAI config directory if it exists
-	openaiConfigDir := filepath.Join(home, ".codex")
-	if fi, err := os.Stat(openaiConfigDir); err == nil && fi.IsDir() {
-		mounts = append(mounts, "-v", fmt.Sprintf("%s:/home/node/.codex", openaiConfigDir))
-	} else {
-		fmt.Fprintf(os.Stderr, "Warning: %s not found or not a directory; proceeding without it.\n", openaiConfigDir)
+	// mount Claude, Codex, and Gemini config directories
+	for _, dir := range []string{"claude", "codex", "gemini"} {
+		configDir := filepath.Join(home, "."+dir)
+		if fi, err := os.Stat(configDir); err == nil && fi.IsDir() {
+			mounts = append(mounts, "-v", fmt.Sprintf("%s:/home/node/.%s", configDir, dir))
+		} else {
+			fmt.Fprintf(os.Stderr, "Warning: %s not found or not a directory; proceeding without it.\n", configDir)
+		}
 	}
 
 	// Mount workspace directories
@@ -275,7 +354,13 @@ func runCli(args []string) error {
 	exec.Command("docker", "rm", "-f", "claudex").Run()
 
 	// Run the container in detached mode
-	runArgs := []string{"run", "--name", "claudex", "-d", "-e", "OPENAI_API_KEY", "-e", "AI_API_MK", "--cap-add", "NET_ADMIN", "--cap-add", "NET_RAW"}
+	runArgs := []string{"run", "--name", "claudex", "-d", "-e", "OPENAI_API_KEY", "-e", "AI_API_MK", "-e", "GEMINI_API_KEY", "--cap-add", "NET_ADMIN", "--cap-add", "NET_RAW"}
+
+	// Add host networking if requested
+	if useHostNetwork {
+		runArgs = append(runArgs, "--network=host")
+	}
+
 	runArgs = append(runArgs, mounts...)
 	runArgs = append(runArgs, "claudex", "sleep", "infinity")
 	cmdRun := exec.Command("docker", runArgs...)
@@ -294,12 +379,14 @@ func runCli(args []string) error {
 		return fmt.Errorf("git init failed: %w", err)
 	}
 
-	// Initialize the firewall inside the container
-	cmdFirewall := exec.Command("docker", "exec", "claudex", "bash", "-c", "sudo /usr/local/bin/init-firewall.sh")
-	cmdFirewall.Stdout = os.Stdout
-	cmdFirewall.Stderr = os.Stderr
-	if err := cmdFirewall.Run(); err != nil {
-		return fmt.Errorf("init-firewall failed: %w", err)
+	// Initialize the firewall inside the container (skip with host networking)
+	if !useHostNetwork {
+		cmdFirewall := exec.Command("docker", "exec", "claudex", "bash", "-c", "sudo /usr/local/bin/init-firewall.sh")
+		cmdFirewall.Stdout = os.Stdout
+		cmdFirewall.Stderr = os.Stderr
+		if err := cmdFirewall.Run(); err != nil {
+			return fmt.Errorf("init-firewall failed: %w", err)
+		}
 	}
 
 	// Attach an interactive shell
