@@ -127,20 +127,10 @@ Include files/directories in a running container:
 // includeCommand copies a file or directory to the /context directory in the claudex container.
 func includeCommand(args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("usage: claudex include <file_or_directory>")
+		return fmt.Errorf("usage: claudex include <file_or_directory> [file_or_directory...]")
 	}
 
-	source := args[0]
-	abs, err := filepath.Abs(source)
-	if err != nil {
-		return fmt.Errorf("invalid path: %s", source)
-	}
-
-	if _, err := os.Stat(abs); err != nil {
-		return fmt.Errorf("'%s' does not exist", abs)
-	}
-
-	// Check if claudex container is running
+	// Check if claudex container is running once
 	cmd := exec.Command("docker", "ps", "-q", "-f", "name=claudex")
 	out, err := cmd.Output()
 	if err != nil {
@@ -150,21 +140,34 @@ func includeCommand(args []string) error {
 		return fmt.Errorf("claudex container is not running. Start it first with 'claudex'")
 	}
 
-	// Use docker cp to copy the file/directory
-	basename := filepath.Base(abs)
-	destPath := fmt.Sprintf("claudex:/context/%s", basename)
+	// Process each argument
+	for _, source := range args {
+		abs, err := filepath.Abs(source)
+		if err != nil {
+			return fmt.Errorf("invalid path: %s", source)
+		}
 
-	fmt.Printf("Including %s at /context/%s...\n", abs, basename)
+		if _, err := os.Stat(abs); err != nil {
+			return fmt.Errorf("'%s' does not exist", abs)
+		}
 
-	cpCmd := exec.Command("docker", "cp", abs, destPath)
-	cpCmd.Stdout = os.Stdout
-	cpCmd.Stderr = os.Stderr
+		// Use docker cp to copy the file/directory
+		basename := filepath.Base(abs)
+		destPath := fmt.Sprintf("claudex:/context/%s", basename)
 
-	if err := cpCmd.Run(); err != nil {
-		return fmt.Errorf("docker cp failed: %w", err)
+		fmt.Printf("Including %s at /context/%s...\n", abs, basename)
+
+		cpCmd := exec.Command("docker", "cp", abs, destPath)
+		cpCmd.Stdout = os.Stdout
+		cpCmd.Stderr = os.Stderr
+
+		if err := cpCmd.Run(); err != nil {
+			return fmt.Errorf("docker cp failed for %s: %w", abs, err)
+		}
+
+		fmt.Printf("Successfully included %s at /context/%s\n", abs, basename)
 	}
 
-	fmt.Printf("Successfully included %s at /context/%s\n", abs, basename)
 	return nil
 }
 
@@ -352,6 +355,11 @@ func runCli(args []string) error {
 
 	// Run the container in detached mode
 	runArgs := []string{"run", "--name", "claudex", "-d", "-e", "OPENAI_API_KEY", "-e", "AI_API_MK", "-e", "GEMINI_API_KEY", "--cap-add", "NET_ADMIN", "--cap-add", "NET_RAW"}
+
+	// Add host networking if requested
+	if useHostNetwork {
+		runArgs = append(runArgs, "--network=host")
+	}
 
 	runArgs = append(runArgs, mounts...)
 	runArgs = append(runArgs, "claudex", "sleep", "infinity")
