@@ -41,8 +41,8 @@ RUN SNIPPET="export PROMPT_COMMAND='history -a' && export HISTFILE=/commandhisto
 ENV DEVCONTAINER=true
 
 # Create workspace, context, config, and instructions directories and set permissions
-RUN mkdir -p /workspace /context /home/node/.claude /home/node/instructions && \
-  chown -R node:node /workspace /context /home/node/.claude /home/node/instructions
+RUN mkdir -p /workspace /context /home/node/.claude /home/node/.codex /home/node/.gemini /home/node/instructions && \
+  chown -R node:node /workspace /context /home/node/.claude /home/node/.codex /home/node/.gemini /home/node/instructions
 
 WORKDIR /workspace
 
