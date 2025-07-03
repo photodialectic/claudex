@@ -355,6 +355,12 @@ func runCli(args []string) error {
 
 	// Run the container in detached mode
 	runArgs := []string{"run", "--name", "claudex", "-d", "-e", "OPENAI_API_KEY", "-e", "AI_API_MK", "-e", "GEMINI_API_KEY", "--cap-add", "NET_ADMIN", "--cap-add", "NET_RAW"}
+	// add docker sock mount
+	if _, err := os.Stat("/var/run/docker.sock"); err == nil {
+		runArgs = append(runArgs, "-v", "/var/run/docker.sock:/var/run/docker.sock")
+	} else {
+		fmt.Fprintln(os.Stderr, "Warning: /var/run/docker.sock not found; Docker commands inside the container will not work.")
+	}
 
 	// Add host networking if requested
 	if useHostNetwork {
