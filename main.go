@@ -171,7 +171,7 @@ func includeCommand(args []string) error {
 	return nil
 }
 
-//go:embed Dockerfile init-firewall.sh
+//go:embed Dockerfile init-firewall.sh CLAUDEX.md
 var dockerContextFS embed.FS
 
 // prepareBuildContext writes embedded Dockerfile and init-firewall.sh to a temp directory.
@@ -180,7 +180,7 @@ func prepareBuildContext() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("cannot create temp build dir: %w", err)
 	}
-	files := []string{"Dockerfile", "init-firewall.sh"}
+	files := []string{"Dockerfile", "init-firewall.sh", "CLAUDEX.md"}
 	for _, name := range files {
 		data, err := dockerContextFS.ReadFile(name)
 		if err != nil {
@@ -195,6 +195,7 @@ func prepareBuildContext() (string, error) {
 	}
 	return tmpDir, nil
 }
+
 
 // build or updates the claudex Docker image.
 func build() error {

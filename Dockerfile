@@ -97,6 +97,10 @@ RUN npm install -g @openai/codex
 # Install Gemini
 RUN npm install -g @google/gemini-cli
 
+COPY CLAUDEX.md /workspace/CLAUDE.md
+COPY CLAUDEX.md /workspace/CODEX.md
+COPY CLAUDEX.md /workspace/GEMINI.md
+
 # Copy and set up firewall script
 COPY init-firewall.sh /usr/local/bin/
 USER root
