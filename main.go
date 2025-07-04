@@ -171,7 +171,7 @@ func includeCommand(args []string) error {
 	return nil
 }
 
-//go:embed Dockerfile init-firewall.sh
+//go:embed Dockerfile init-firewall.sh CLAUDEX.md
 var dockerContextFS embed.FS
 
 // prepareBuildContext writes embedded Dockerfile and init-firewall.sh to a temp directory.
@@ -180,7 +180,7 @@ func prepareBuildContext() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("cannot create temp build dir: %w", err)
 	}
-	files := []string{"Dockerfile", "init-firewall.sh"}
+	files := []string{"Dockerfile", "init-firewall.sh", "CLAUDEX.md"}
 	for _, name := range files {
 		data, err := dockerContextFS.ReadFile(name)
 		if err != nil {
@@ -195,6 +195,7 @@ func prepareBuildContext() (string, error) {
 	}
 	return tmpDir, nil
 }
+
 
 // build or updates the claudex Docker image.
 func build() error {
@@ -355,6 +356,12 @@ func runCli(args []string) error {
 
 	// Run the container in detached mode
 	runArgs := []string{"run", "--name", "claudex", "-d", "-e", "OPENAI_API_KEY", "-e", "AI_API_MK", "-e", "GEMINI_API_KEY", "--cap-add", "NET_ADMIN", "--cap-add", "NET_RAW"}
+	// add docker sock mount
+	if _, err := os.Stat("/var/run/docker.sock"); err == nil {
+		runArgs = append(runArgs, "-v", "/var/run/docker.sock:/var/run/docker.sock")
+	} else {
+		fmt.Fprintln(os.Stderr, "Warning: /var/run/docker.sock not found; Docker commands inside the container will not work.")
+	}
 
 	// Add host networking if requested
 	if useHostNetwork {
