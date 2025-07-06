@@ -98,7 +98,7 @@ RUN npm install -g @openai/codex
 RUN npm install -g @google/gemini-cli
 
 COPY CLAUDEX.md /workspace/CLAUDE.md
-COPY CLAUDEX.md /workspace/CODEX.md
+COPY CLAUDEX.md /workspace/AGENTS.md
 COPY CLAUDEX.md /workspace/GEMINI.md
 
 # Copy and set up firewall script
