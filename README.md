@@ -129,7 +129,7 @@ In `~/.claude.json`, add the following:
 }
 ```
 
-Then when you use claude, you can see its one of the MCP servers:
+Then when you use claude, you can see it’s one of the MCP servers:
 
 ```
 ╭───────────────────────────────────────────────╮
@@ -150,7 +150,7 @@ Which means you can use codex as a tool in Claude - agentception!
 <details>
 <summary>Bug with `codex mcp` command</summary>
 
-There is a bug in `codex mcp` command where the -c flags don't really do anything. I wanted to overrid the model and provider, but it doesn't work. So I have to use the `codex mcp` command with the `echo` trick to pass the JSON-RPC request.
+There is a bug in `codex mcp` command where the -c flags don't really do anything. I wanted to override the model and provider, but it doesn't work. So I have to use the `codex mcp` command with the `echo` trick to pass the JSON-RPC request.
 
 ```
 $ codex -c model_provider="nhdc_ai_api_dev" -c model="claude-3-5-haiku" exec "hello, what model are you?"
@@ -196,9 +196,9 @@ node@docker-desktop:/workspace$ echo '{"jsonrpc":"2.0","id":1,"method":"tools/ca
 {"id":1,"jsonrpc":"2.0","result":{"content":[{"text":"Hi there! I’m ChatGPT, powered by OpenAI’s GPT‑4 architecture. How can I help you today?","type":"text"}]}}
 ```
 
-CoPilot says:
+Copilot says:
 
-The problem is in how the Mcp subcommand is implemented compared to other subcommands. Here's what's happening:
+The problem is in how the MCP subcommand is implemented compared to other subcommands. Here's what's happening:
 
 In the main CLI command handler, when you run something like codex exec, the command properly passes the configuration overrides to the exec subcommand:
 
