@@ -95,8 +95,7 @@ In `~/.claude.json`, add the following:
       "-i",
       "--rm",
       "mcp/fetch"
-    ],
-    "env": {}
+    ]
   }
 }
 ```
@@ -119,12 +118,10 @@ In `~/.claude.json`, add the following:
 ```json
 "mcpServers": {
   "codex": {
-    "command": "sudo",
+    "command": "codex",
     "args": [
-      "/usr/bin/codex",
       "mcp"
-    ],
-    "env": {}
+    ]
   }
 }
 ```
@@ -150,7 +147,16 @@ Which means you can use codex as a tool in Claude - agentception!
 <details>
 <summary>Bug with `codex mcp` command</summary>
 
-There is a bug in `codex mcp` command where the -c flags don't really do anything. I wanted to override the model and provider, but it doesn't work. So I have to use the `codex mcp` command with the `echo` trick to pass the JSON-RPC request.
+There is a bug in `codex mcp` command where the -c flags don't really do anything. I wanted to override the model and provider, but it doesn't work.
+
+If I want to use my own model/provider, I have to set those as root values in `~/.codex/config.toml`:
+
+```toml
+model_provider = "nhdc_ai_api_dev"
+model = "claude-3-5-haiku"
+```
+
+Below is proof of the bug:
 
 ```
 $ codex -c model_provider="nhdc_ai_api_dev" -c model="claude-3-5-haiku" exec "hello, what model are you?"
@@ -168,6 +174,10 @@ hello, what model are you?
 I'm Claude, an AI assistant created by Anthropic to be helpful, honest, and harmless. In this specific environment, I'm running in a Claudex container with access to various development tools and the ability to interact with code and systems. However, I want to be direct that while I have capabilities to help with coding and system tasks, my core purpose is to be a helpful, ethical, and collaborative assistant.
 
 Would you like me to help you with a specific coding or development task? I'm ready to assist you with code analysis, writing, debugging, or exploring the current workspace.
+```
+We can observe that `codex -c...` flags work for the `exec` command. You can see from below, `codex mcp` claims to allow the same flags.
+
+```
 node@docker-desktop:/workspace$ codex mcp --help
 Experimental: run Codex as an MCP server
 
@@ -182,6 +192,11 @@ Options:
 
   -h, --help
           Print help (see a summary with '-h')
+```
+
+Using echo to send a JSON-RPC request to the MCP server while running `codex mcp` with the `-c` flags, we can see proof it does not work as expected:
+
+```
 node@docker-desktop:/workspace$ echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"tool":"codex","name":"codex","arguments":{"prompt":"hello, what model are you?"}}}' | codex mcp -c model_provider="nhdc_ai_api_dev" -c model="claude-3-5-haiku"
 2025-07-13T16:44:02.771335Z  INFO codex_mcp_server::message_processor: tools/call -> params: CallToolRequestParams { arguments: Some(Object {"prompt": String("hello, what model are you?")}), name: "codex" }
 2025-07-13T16:44:02.772568Z  INFO codex_core::config: cwd not set, using current dir
@@ -196,11 +211,11 @@ node@docker-desktop:/workspace$ echo '{"jsonrpc":"2.0","id":1,"method":"tools/ca
 {"id":1,"jsonrpc":"2.0","result":{"content":[{"text":"Hi there! I’m ChatGPT, powered by OpenAI’s GPT‑4 architecture. How can I help you today?","type":"text"}]}}
 ```
 
-Copilot says:
+I asked Copilot for help with this issue, and it provided the following explanation:
 
-The problem is in how the MCP subcommand is implemented compared to other subcommands. Here's what's happening:
+> The problem is in how the MCP subcommand is implemented compared to other subcommands. Here's what's happening:
 
-In the main CLI command handler, when you run something like codex exec, the command properly passes the configuration overrides to the exec subcommand:
+> In the main CLI command handler, when you run something like codex exec, the command properly passes the configuration overrides to the exec subcommand:
 
 ```rust
 Some(Subcommand::Exec(mut exec_cli)) => {
@@ -209,7 +224,8 @@ Some(Subcommand::Exec(mut exec_cli)) => {
         }
 ```
 
-But when you look at the MCP handler, it's different:
+> But when you look at the MCP handler, it's different:
+>
 ```rust
 Some(Subcommand::Mcp) => {
     codex_mcp_server::run_main(codex_linux_sandbox_exe).await?;

@@ -196,7 +196,6 @@ func prepareBuildContext() (string, error) {
 	return tmpDir, nil
 }
 
-
 // build or updates the claudex Docker image.
 func build() error {
 	fmt.Println("Building/updating the claudex container image...")
