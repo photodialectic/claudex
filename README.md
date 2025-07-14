@@ -286,3 +286,44 @@ codex -c model_provider="nhdc_ai_api_dev" -c model="claude-3-5-haiku" exec "hell
 claudex --host-network
 ```
 </details>
+
+### Docker Models
+You can run models in Docker containers. This is useful for running models that require specific environments or dependencies. [Docker Model Runner](https://docs.docker.com/ai/model-runner/)
+
+in `~/.codex/config.toml`, add the following:
+
+```toml
+[model_providers.docker_engine]
+name = "Docker Engine"
+base_url = "http://model-runner.docker.internal/engines/v1"
+
+[profiles.docker_engine]
+model_provider = "docker_engine"
+model = "ai/smollm2:360M-Q4_K_M"
+```
+
+```
+codex --profile docker_engine
+```
+
+Test the endpoint (run inside a container):
+
+```bash
+curl http://model-runner.docker.internal/engines/v1/chat/completions \
+-H "Content-Type: application/json" \
+-d '{
+  "model": "ai/smollm2:360M-Q4_K_M",
+    "messages": [
+      {
+        "role": "system",
+        "content": "You are a helpful assistant."
+      },
+      {
+        "role": "user",
+        "content": "hello?"
+      }
+  ]
+}'
+
+{"choices":[{"finish_reason":"stop","index":0,"message":{"role":"assistant","content":"Hello, I'm here to help you with your language learning needs. What would you like to talk about? Do you have a specific question or topic in mind?"}}],"created":1752462477,"model":"ai/smollm2:360M-Q4_K_M","system_fingerprint":"b1-9c98bab","object":"chat.completion","usage":{"completion_tokens":34,"prompt_tokens":21,"total_tokens":55},"id":"chatcmpl-ADlVE5WjDfEgqAAhH2ukxs9aP0ETIcdF","timings":{"prompt_n":21,"prompt_ms":47.946,"prompt_per_token_ms":2.283142857142857,"prompt_per_second":437.9927418345639,"predicted_n":34,"predicted_ms":296.108,"predicted_per_token_ms":8.709058823529412,"predicted_per_second":114.82296999743338}}
+```
