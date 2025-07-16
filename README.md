@@ -90,7 +90,7 @@ In `~/.claude.json`, add the following:
   "fetch": {
     "command": "sudo",
     "args": [
-      "/usr/bin/docker",
+      "docker",
       "run",
       "-i",
       "--rm",
