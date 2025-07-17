@@ -12,7 +12,7 @@ You are running inside a Claudex container, a secure Docker environment designed
 ## Running Tests and Commands
 Since services run in Docker containers, use this pattern:
 ```bash
-sudo docker exec -it <container_name_or_id> <command>
+sudo docker exec <container_name_or_id> <command>
 ```
 
 **Important**: You may need to locate the container ID or name first using `sudo docker ps`.
@@ -23,16 +23,10 @@ Examples:
 sudo docker ps
 
 # Run tests in a service container (using name)
-sudo docker exec -it myapp_web npm test
+sudo docker exec myapp_web /app/scripts/test
 
 # Run tests in a service container (using container ID)
-sudo docker exec -it a1b2c3d4e5f6 npm test
-
-# Run database migrations
-sudo docker exec -it myapp_db ./migrate.sh
-
-# Access a service shell
-sudo docker exec -it myapp_api bash
+sudo docker exec a1b2c3d4e5f6 /app/scripts/test
 ```
 
 ## Available Tools
@@ -85,14 +79,14 @@ sudo docker ps -a
 # Find service containers
 sudo docker ps --filter "name=myapp"
 
+# Run script/test for full test suite
+sudo docker exec myapp_web /app/scripts/test
+
 # Run tests in Node.js service
-sudo docker exec -it myapp_web npm test
+sudo docker exec myapp_web npm test
 
 # Run tests in Python service
-sudo docker exec -it myapp_api python -m pytest
-
-# Access database
-sudo docker exec -it myapp_db psql -U postgres
+sudo docker exec myapp_api python -m pytest
 
 # View service logs
 sudo docker logs myapp_web --tail=50 -f
