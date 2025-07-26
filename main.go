@@ -258,44 +258,20 @@ func runCli(args []string) error {
 
 	// Mount workspace directories
 	if len(args) == 0 {
-		cwd, err := os.Getwd()
+		args = []string{"."} // Default to current directory if no args provided
+	}
+
+	for _, d := range args {
+		abs, err := filepath.Abs(d)
 		if err != nil {
-			return err
-		}
-		abs, err := filepath.Abs(cwd)
-		if err != nil {
-			return fmt.Errorf("invalid path: %s", cwd)
+			return fmt.Errorf("invalid path: %s", d)
 		}
 		fi, err := os.Stat(abs)
 		if err != nil || !fi.IsDir() {
 			return fmt.Errorf("'%s' is not a directory", abs)
 		}
-		entries, err := os.ReadDir(abs)
-		if err != nil {
-			return fmt.Errorf("cannot read directory: %s", abs)
-		}
-		for _, e := range entries {
-			name := e.Name()
-			// Skip git and env dotfiles
-			if strings.HasPrefix(name, ".env") || name == ".git" {
-				continue
-			}
-			path := filepath.Join(abs, name)
-			mounts = append(mounts, "-v", fmt.Sprintf("%s:/workspace/%s", path, name))
-		}
-	} else {
-		for _, d := range args {
-			abs, err := filepath.Abs(d)
-			if err != nil {
-				return fmt.Errorf("invalid path: %s", d)
-			}
-			fi, err := os.Stat(abs)
-			if err != nil || !fi.IsDir() {
-				return fmt.Errorf("'%s' is not a directory", abs)
-			}
-			name := filepath.Base(abs)
-			mounts = append(mounts, "-v", fmt.Sprintf("%s:/workspace/%s", abs, name))
-		}
+		name := filepath.Base(abs)
+		mounts = append(mounts, "-v", fmt.Sprintf("%s:/workspace/%s", abs, name))
 	}
 
 	// Prompt to mount instructions if interactive
