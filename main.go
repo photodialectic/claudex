@@ -335,7 +335,7 @@ func runCli(args []string) error {
 	if _, err := os.Stat("/var/run/docker.sock"); err == nil {
 		runArgs = append(runArgs, "-v", "/var/run/docker.sock:/var/run/docker.sock")
 	} else {
-		fmt.Fprintln(os.Stderr, "Warning: /var/run/docker.sock not found; Docker commands inside the container will not work.")
+		fmt.Fprintln(os.Stderr, "Warning: /var/run/docker.sock not found; Docker commands inside the container will not work. If you're on macOS with Docker Desktop, you may need to symlink the CLI socket, e.g.:\n  sudo ln -s ~/Library/Containers/com.docker.docker/Data/docker-cli.sock /var/run/docker.sock\n")
 	}
 
 	// Add host networking if requested
