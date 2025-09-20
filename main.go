@@ -3,7 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
-	"crypto/sha1"
+	"crypto/sha256"
 	"embed"
 	"encoding/json"
 	"errors"
@@ -147,7 +147,7 @@ List claudex containers:
 
 Destroy claudex containers:
   %s destroy [--name <NAME> | --signature <HASH> | --all] [--running|--stopped] [--force|--prune-stopped]
-`, prog, prog, prog, prog, prog, prog, prog, prog)
+`, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog)
 	os.Exit(0)
 }
 
@@ -293,7 +293,7 @@ func normalizeDirs(dirs []string) ([]string, error) {
 
 func deriveSignature(norm []string) string {
 	salt := os.Getenv("CLAUDEX_NAME_SALT")
-	h := sha1.New()
+	h := sha256.New()
 	for _, p := range norm {
 		v := p
 		if salt != "" {
@@ -370,14 +370,15 @@ func dockerOutput(args ...string) ([]byte, error) {
 func containerExists(name string) (exists bool, running bool, info *containerInfo, err error) {
 	out, err := dockerOutput("inspect", name, "--format", "{{json .}}")
 	if err != nil {
+		// Distinguish not-found from other errors
 		if bytes.Contains(out, []byte("No such object")) || bytes.Contains(out, []byte("Error: No such object")) {
 			return false, false, nil, nil
 		}
-		return false, false, nil, nil
+		return false, false, nil, fmt.Errorf("docker inspect failed for %s: %s", name, strings.TrimSpace(string(out)))
 	}
 	var raw map[string]any
 	if err := json.Unmarshal(out, &raw); err != nil {
-		return true, false, nil, nil
+		return true, false, nil, fmt.Errorf("failed to parse docker inspect for %s: %v", name, err)
 	}
 	state := ""
 	if m, ok := raw["State"].(map[string]any); ok {
@@ -643,32 +644,34 @@ func runCli(args []string) error {
 	}
 
 	// Reuse-or-create flow
-	exists, running, info, _ := containerExists(name)
-	if exists {
-		if forceReplace {
-			fmt.Printf("Replacing existing container %s...\n", name)
-			exec.Command("docker", "rm", "-f", name).Run()
-		} else {
-			if info != nil {
-				if labeled, err := mountsFromLabel(info); err == nil && !compareStringSlices(labeled, normDirs) {
-					if strictMounts {
-						return fmt.Errorf("mount mismatch for %s. Use --replace or --parallel", name)
-					}
-					fmt.Fprintf(os.Stderr, "Warning: mount mismatch with container %s. Attaching anyway.\n", name)
+	exists, running, info, err := containerExists(name)
+	if err != nil {
+		return err
+	}
+	if exists && !forceReplace {
+		if info != nil {
+			if labeled, err := mountsFromLabel(info); err == nil && !compareStringSlices(labeled, normDirs) {
+				if strictMounts {
+					return fmt.Errorf("mount mismatch for %s. Use --replace or --parallel", name)
 				}
+				fmt.Fprintf(os.Stderr, "Warning: mount mismatch with container %s. Attaching anyway.\n", name)
 			}
-			if !running {
-				fmt.Printf("Starting container %s...\n", name)
-				if err := exec.Command("docker", "start", name).Run(); err != nil {
-					return fmt.Errorf("failed to start container: %w", err)
-				}
-			}
-			cmdShell := exec.Command("docker", "exec", "-it", name, "bash")
-			cmdShell.Stdin = os.Stdin
-			cmdShell.Stdout = os.Stdout
-			cmdShell.Stderr = os.Stderr
-			return cmdShell.Run()
 		}
+		if !running {
+			fmt.Printf("Starting container %s...\n", name)
+			if err := exec.Command("docker", "start", name).Run(); err != nil {
+				return fmt.Errorf("failed to start container: %w", err)
+			}
+		}
+		cmdShell := exec.Command("docker", "exec", "-it", name, "bash")
+		cmdShell.Stdin = os.Stdin
+		cmdShell.Stdout = os.Stdout
+		cmdShell.Stderr = os.Stderr
+		return cmdShell.Run()
+	}
+	if exists && forceReplace {
+		fmt.Printf("Replacing existing container %s...\n", name)
+		exec.Command("docker", "rm", "-f", name).Run()
 	}
 
 	// Run the container in detached mode
@@ -787,23 +790,34 @@ func listCommand(args []string) error {
 		cons = tmp
 	}
 
-	match := func(glob, s string) bool {
-		if glob == "" {
-			return true
-		}
-		ok, _ := filepath.Match(glob, s)
-		return ok
-	}
 	var outList []containerInfo
 	for _, c := range cons {
-		if v, ok := filters["name"]; ok && !match(v, c.Name) {
-			continue
+		if v, ok := filters["name"]; ok {
+			if v == "" {
+				continue
+			}
+			okm, err := filepath.Match(v, c.Name)
+			if err != nil {
+				return fmt.Errorf("invalid --filter name pattern %q: %v", v, err)
+			}
+			if !okm {
+				continue
+			}
 		}
 		if v, ok := filters["signature"]; ok && c.Labels["com.claudex.signature"] != v {
 			continue
 		}
-		if v, ok := filters["slug"]; ok && !match(v, c.Labels["com.claudex.slug"]) {
-			continue
+		if v, ok := filters["slug"]; ok {
+			if v == "" {
+				continue
+			}
+			okm, err := filepath.Match(v, c.Labels["com.claudex.slug"])
+			if err != nil {
+				return fmt.Errorf("invalid --filter slug pattern %q: %v", v, err)
+			}
+			if !okm {
+				continue
+			}
 		}
 		outList = append(outList, c)
 	}
