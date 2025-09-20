@@ -18,72 +18,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/peterh/liner"
-	"golang.org/x/term"
 )
-
-// promptPath prompts the user for input with file path completion.
-func promptPath(prompt string) (string, error) {
-	line := liner.NewLiner()
-	defer line.Close()
-	line.SetCtrlCAborts(true)
-	line.SetCompleter(func(input string) []string {
-		var comps []string
-		var homeDir string
-		var usingTilde bool
-		if strings.HasPrefix(input, "~/") || input == "~" {
-			if hd, err := os.UserHomeDir(); err == nil {
-				homeDir = hd
-				usingTilde = true
-				if input == "~" {
-					input = homeDir
-				} else {
-					input = homeDir + input[1:]
-				}
-			}
-		}
-		dir, file := filepath.Split(input)
-		if dir == "" {
-			dir = "."
-		}
-		entries, err := os.ReadDir(dir)
-		if err != nil {
-			return comps
-		}
-		for _, e := range entries {
-			name := e.Name()
-			if strings.HasPrefix(name, file) {
-				var suggestion string
-				if e.IsDir() {
-					suggestion = filepath.Join(dir, name) + string(os.PathSeparator)
-				} else {
-					suggestion = filepath.Join(dir, name)
-				}
-				if usingTilde && homeDir != "" && strings.HasPrefix(suggestion, homeDir) {
-					suggestion = "~" + suggestion[len(homeDir):]
-				}
-				comps = append(comps, suggestion)
-			}
-		}
-		return comps
-	})
-	res, err := line.Prompt(prompt)
-	if err != nil {
-		return "", err
-	}
-	// Expand ~ to home directory on result
-	if strings.HasPrefix(res, "~/") || res == "~" {
-		if home, err2 := os.UserHomeDir(); err2 == nil {
-			if res == "~" {
-				res = home
-			} else {
-				res = home + res[1:]
-			}
-		}
-	}
-	return res, nil
-}
 
 func main() {
 	if len(os.Args) > 1 {
@@ -672,36 +607,6 @@ func runCli(args []string) error {
 		mounts = append(mounts, "-v", fmt.Sprintf("%s:/workspace/%s", abs, base))
 	}
 
-	// Prompt to mount instructions if interactive
-	if term.IsTerminal(int(os.Stdin.Fd())) {
-		fmt.Print("Do you have an instructions file or directory to mount for this session? [y/N] ")
-		reader := bufio.NewReader(os.Stdin)
-		ans, _ := reader.ReadString('\n')
-		ans = strings.TrimSpace(ans)
-		if strings.EqualFold(ans, "y") {
-			instr, err := promptPath("Enter path to instructions file or directory: ")
-			if err != nil {
-				return fmt.Errorf("failed to read instructions path: %w", err)
-			}
-			abs, err := filepath.Abs(instr)
-			if err != nil {
-				return fmt.Errorf("invalid path: %s", instr)
-			}
-			fi, err := os.Stat(abs)
-			if err != nil {
-				return fmt.Errorf("'%s' does not exist", abs)
-			}
-			if fi.IsDir() {
-				mounts = append(mounts, "-v", fmt.Sprintf("%s:/workspace/instructions", abs))
-				fmt.Printf("Mounted instructions directory: %s -> /workspace/instructions\n", abs)
-			} else {
-				name := filepath.Base(abs)
-				mounts = append(mounts, "-v", fmt.Sprintf("%s:/workspace/instructions/%s", abs, name))
-				fmt.Printf("Mounted instructions file: %s -> /workspace/instructions/%s\n", abs, name)
-			}
-		}
-	}
-
 	// Ensure the 'claudex' image exists; build if missing
 	out, err := exec.Command("docker", "images", "-q", "claudex").Output()
 	if err != nil {
@@ -980,28 +885,76 @@ func destroyCommand(args []string) error {
 	if err != nil {
 		return err
 	}
-	var victims []containerInfo
+	// Build candidate pool by status
+	var pool []containerInfo
 	for _, c := range cons {
-		if !all && byName == "" && bySig == "" {
-			return fmt.Errorf("specify --name, --signature, or --all")
-		}
-		if byName != "" && c.Name != byName {
-			continue
-		}
-		if bySig != "" && c.Labels["com.claudex.signature"] != bySig {
-			continue
-		}
 		if runningOnly && c.Status != "running" {
 			continue
 		}
 		if stoppedOnly && c.Status == "running" {
 			continue
 		}
-		victims = append(victims, c)
+		pool = append(pool, c)
 	}
-	if len(victims) == 0 {
-		fmt.Println("No matching containers.")
-		return nil
+
+	// Resolve victims from selectors or interactive choice
+	var victims []containerInfo
+	if all {
+		victims = append(victims, pool...)
+	} else if byName != "" || bySig != "" {
+		for _, c := range pool {
+			if byName != "" && c.Name != byName {
+				continue
+			}
+			if bySig != "" && c.Labels["com.claudex.signature"] != bySig {
+				continue
+			}
+			victims = append(victims, c)
+		}
+		if len(victims) == 0 {
+			fmt.Println("No matching containers.")
+			return nil
+		}
+	} else {
+		if len(pool) == 0 {
+			fmt.Println("No claudex containers match the status filter.")
+			return nil
+		}
+		fmt.Println("Select containers to destroy (comma-separated numbers):")
+		for i, c := range pool {
+			sig := c.Labels["com.claudex.signature"]
+			slug := c.Labels["com.claudex.slug"]
+			fmt.Printf("  [%d] %-32s %-10s %-8s %-16s\n", i+1, c.Name, c.Status, sig, slug)
+		}
+		fmt.Print("Enter selection (blank to abort): ")
+		reader := bufio.NewReader(os.Stdin)
+		line, _ := reader.ReadString('\n')
+		line = strings.TrimSpace(line)
+		if line == "" {
+			fmt.Println("Aborted.")
+			return nil
+		}
+		parts := strings.Split(line, ",")
+		seen := map[int]bool{}
+		for _, p := range parts {
+			p = strings.TrimSpace(p)
+			if p == "" {
+				continue
+			}
+			idx, err := strconv.Atoi(p)
+			if err != nil || idx < 1 || idx > len(pool) {
+				return fmt.Errorf("invalid selection '%s'", p)
+			}
+			if seen[idx] {
+				continue
+			}
+			seen[idx] = true
+			victims = append(victims, pool[idx-1])
+		}
+		if len(victims) == 0 {
+			fmt.Println("No selection; aborted.")
+			return nil
+		}
 	}
 
 	if !force {
