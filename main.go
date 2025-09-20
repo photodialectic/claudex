@@ -15,6 +15,7 @@ import (
 	"regexp"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -92,6 +93,16 @@ func main() {
 				log.Fatalf("build failed: %v", err)
 			}
 			return
+		case "push":
+			if err := pushCommand(os.Args[2:]); err != nil {
+				log.Fatalf("push failed: %v", err)
+			}
+			return
+		case "pull":
+			if err := pullCommand(os.Args[2:]); err != nil {
+				log.Fatalf("pull failed: %v", err)
+			}
+			return
 		case "list":
 			if err := listCommand(os.Args[2:]); err != nil {
 				log.Fatalf("list failed: %v", err)
@@ -141,20 +152,26 @@ Examples:
 Build or updates the Docker image:
   %s build
 
+Push/pull files with a container:
+  %s push [--name <NAME>] <file_or_dir> [...]
+  %s pull [--name <NAME>] <container_path> [dest_dir (default /tmp)]
+
 Include files/directories in a running container:
-  %s include [--name <NAME> | --auto] <file_or_directory> [...]
+  %s include [--name <NAME> | --auto] <file_or_directory> [...] (deprecated; use push)
 
 List claudex containers:
   %s list [--all|--running|--stopped] [--format table|json|names] [--filter key=value]
 
 Destroy claudex containers:
   %s destroy [--name <NAME> | --signature <HASH> | --all] [--running|--stopped] [--force|--prune-stopped]
-`, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog)
+`, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog)
 	os.Exit(0)
 }
 
 // includeCommand copies a file or directory to the /context directory in the claudex container.
 func includeCommand(args []string) error {
+	// Deprecated
+	fmt.Fprintln(os.Stderr, "Note: 'include' is deprecated; use 'claudex push' instead.")
 	// parse flags: --name, --auto
 	var name string
 	var auto bool
@@ -371,6 +388,72 @@ func deriveName(slug, sig string) string {
 func dockerOutput(args ...string) ([]byte, error) {
 	cmd := exec.Command("docker", args...)
 	return cmd.CombinedOutput()
+}
+
+// pickRunningContainer selects a running container by explicit name or prompts when multiple.
+func pickRunningContainer(name string) (string, error) {
+	if name != "" {
+		exists, running, _, err := containerExists(name)
+		if err != nil {
+			return "", err
+		}
+		if !exists || !running {
+			return "", fmt.Errorf("container %s is not running", name)
+		}
+		return name, nil
+	}
+
+	containers, err := getClaudexContainers(false)
+	if err != nil {
+		return "", err
+	}
+	count := len(containers)
+	if count == 0 {
+		return "", fmt.Errorf("no running claudex containers. Start one first")
+	}
+	if count == 1 {
+		return containers[0].Name, nil
+	}
+
+	fmt.Println("Select a target container:")
+	for i, c := range containers {
+		sig := c.Labels["com.claudex.signature"]
+		slug := c.Labels["com.claudex.slug"]
+		created := c.CreatedAt.Format("2006-01-02 15:04:05")
+		fmt.Printf("  [%d] %s  (%s  %s  %s)\n", i+1, c.Name, c.Status, created, slug+":"+sig)
+	}
+	fmt.Print("Enter number: ")
+	reader := bufio.NewReader(os.Stdin)
+	line, _ := reader.ReadString('\n')
+	line = strings.TrimSpace(line)
+	idx, err := strconv.Atoi(line)
+	if err != nil {
+		return "", fmt.Errorf("invalid selection: %v", err)
+	}
+	if idx < 1 || idx > count {
+		return "", fmt.Errorf("selection out of range")
+	}
+	return containers[idx-1].Name, nil
+}
+
+// warnOrErrorOnMountMismatch validates mounts, returning error if strict or warning otherwise.
+func warnOrErrorOnMountMismatch(info *containerInfo, normDirs []string, strict bool, name string) error {
+	if info == nil {
+		return nil
+	}
+	labeled, err := mountsFromLabel(info)
+	if err != nil {
+		return nil
+	}
+	same := compareStringSlices(labeled, normDirs)
+	if same {
+		return nil
+	}
+	if strict {
+		return fmt.Errorf("mount mismatch for %s. Use --replace or --parallel", name)
+	}
+	fmt.Fprintf(os.Stderr, "Warning: mount mismatch with container %s. Attaching anyway.\n", name)
+	return nil
 }
 
 func containerExists(name string) (exists bool, running bool, info *containerInfo, err error) {
@@ -647,17 +730,8 @@ func runCli(args []string) error {
 		return err
 	}
 	if exists && !forceReplace {
-		var labeled []string
-		if info != nil {
-			if lm, err := mountsFromLabel(info); err == nil {
-				labeled = lm
-			}
-		}
-		if len(labeled) > 0 && !compareStringSlices(labeled, normDirs) {
-			if strictMounts {
-				return fmt.Errorf("mount mismatch for %s. Use --replace or --parallel", name)
-			}
-			fmt.Fprintf(os.Stderr, "Warning: mount mismatch with container %s. Attaching anyway.\n", name)
+		if err := warnOrErrorOnMountMismatch(info, normDirs, strictMounts, name); err != nil {
+			return err
 		}
 		if !running {
 			fmt.Printf("Starting container %s...\n", name)
@@ -951,6 +1025,102 @@ func destroyCommand(args []string) error {
 		if err := exec.Command("docker", "rm", "-f", v.Name).Run(); err != nil {
 			fmt.Fprintf(os.Stderr, "Failed to remove %s: %v\n", v.Name, err)
 		}
+	}
+	return nil
+}
+
+// pushCommand copies local files/dirs into /workspace of a running container.
+func pushCommand(args []string) error {
+	var nameFlag string
+	var paths []string
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch a {
+		case "--name":
+			if i+1 >= len(args) {
+				return fmt.Errorf("--name requires a value")
+			}
+			nameFlag = args[i+1]
+			i++
+		default:
+			paths = append(paths, a)
+		}
+	}
+	if len(paths) == 0 {
+		return fmt.Errorf("usage: claudex push [--name <NAME>] <file_or_dir> [...]")
+	}
+
+	target, err := pickRunningContainer(nameFlag)
+	if err != nil {
+		return err
+	}
+
+	for _, p := range paths {
+		abs, err := filepath.Abs(p)
+		if err != nil {
+			return fmt.Errorf("invalid path: %s", p)
+		}
+		if _, err := os.Stat(abs); err != nil {
+			return fmt.Errorf("'%s' does not exist", abs)
+		}
+		// Copy to /workspace
+		dest := fmt.Sprintf("%s:/workspace/", target)
+		fmt.Printf("Pushing %s -> %s\n", abs, dest)
+		cmd := exec.Command("docker", "cp", abs, dest)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("docker cp failed for %s: %w", abs, err)
+		}
+	}
+	return nil
+}
+
+// pullCommand copies a file/dir from a container to a local destination directory.
+// Usage: claudex pull [--name <NAME>] <container_path> [dest_dir (default /tmp)]
+func pullCommand(args []string) error {
+	var nameFlag string
+	var rest []string
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch a {
+		case "--name":
+			if i+1 >= len(args) {
+				return fmt.Errorf("--name requires a value")
+			}
+			nameFlag = args[i+1]
+			i++
+		default:
+			rest = append(rest, a)
+		}
+	}
+	if len(rest) == 0 {
+		return fmt.Errorf("usage: claudex pull [--name <NAME>] <container_path> [dest_dir]")
+	}
+
+	containerPath := rest[0]
+	destDir := "/tmp"
+	if len(rest) >= 2 {
+		destDir = rest[1]
+	}
+
+	target, err := pickRunningContainer(nameFlag)
+	if err != nil {
+		return err
+	}
+
+	// Ensure destination exists
+	if err := os.MkdirAll(destDir, 0755); err != nil {
+		return fmt.Errorf("cannot ensure destination %s: %v", destDir, err)
+	}
+
+	src := fmt.Sprintf("%s:%s", target, containerPath)
+	fmt.Printf("Pulling %s -> %s\n", src, destDir)
+	cmd := exec.Command("docker", "cp", src, destDir)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("docker cp failed: %w", err)
 	}
 	return nil
 }
