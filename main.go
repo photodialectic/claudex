@@ -12,6 +12,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -264,10 +266,15 @@ type containerInfo struct {
 	Labels    map[string]string
 }
 
-func normalizeDirs(dirs []string) ([]string, error) {
+// defaultDirs returns ["."] if input is empty, otherwise returns input.
+func defaultDirs(dirs []string) []string {
 	if len(dirs) == 0 {
-		dirs = []string{"."}
+		return []string{"."}
 	}
+	return dirs
+}
+
+func normalizeDirs(dirs []string) ([]string, error) {
 	var res []string
 	for _, d := range dirs {
 		if d == "" {
@@ -327,9 +334,8 @@ func toKebab(s string) string {
 	}
 	out := b.String()
 	out = strings.Trim(out, "-")
-	for strings.Contains(out, "--") {
-		out = strings.ReplaceAll(out, "--", "-")
-	}
+	dashSeq := regexp.MustCompile(`-+`)
+	out = dashSeq.ReplaceAllString(out, "-")
 	if out == "" {
 		out = "ws"
 	}
@@ -459,15 +465,7 @@ func mountsFromLabel(info *containerInfo) ([]string, error) {
 }
 
 func compareStringSlices(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
+	return slices.Equal(a, b)
 }
 
 //go:embed Dockerfile init-firewall.sh CLAUDEX.md
@@ -545,7 +543,7 @@ func runCli(args []string) error {
 	}
 
 	// Normalize workdirs
-	normDirs, err := normalizeDirs(workdirs)
+	normDirs, err := normalizeDirs(defaultDirs(workdirs))
 	if err != nil {
 		return err
 	}
@@ -649,13 +647,17 @@ func runCli(args []string) error {
 		return err
 	}
 	if exists && !forceReplace {
+		var labeled []string
 		if info != nil {
-			if labeled, err := mountsFromLabel(info); err == nil && !compareStringSlices(labeled, normDirs) {
-				if strictMounts {
-					return fmt.Errorf("mount mismatch for %s. Use --replace or --parallel", name)
-				}
-				fmt.Fprintf(os.Stderr, "Warning: mount mismatch with container %s. Attaching anyway.\n", name)
+			if lm, err := mountsFromLabel(info); err == nil {
+				labeled = lm
 			}
+		}
+		if len(labeled) > 0 && !compareStringSlices(labeled, normDirs) {
+			if strictMounts {
+				return fmt.Errorf("mount mismatch for %s. Use --replace or --parallel", name)
+			}
+			fmt.Fprintf(os.Stderr, "Warning: mount mismatch with container %s. Attaching anyway.\n", name)
 		}
 		if !running {
 			fmt.Printf("Starting container %s...\n", name)
