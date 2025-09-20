@@ -130,11 +130,12 @@ func includeCommand(args []string) error {
 		return fmt.Errorf("usage: claudex include [--name <NAME> | --auto] <file_or_directory> [more...]")
 	}
 
-	// Determine target container
+	// Determine target container (early-return style)
 	var target string
 	if name != "" {
 		target = name
-	} else if auto {
+	}
+	if target == "" && auto {
 		// compute signature from current directory
 		norm, err := normalizeDirs([]string{"."})
 		if err != nil {
@@ -145,30 +146,34 @@ func includeCommand(args []string) error {
 		if err != nil {
 			return err
 		}
-		newest := containerInfo{}
+		var newest containerInfo
 		found := false
 		for _, c := range cons {
-			if c.Labels["com.claudex.signature"] == sig {
-				if !found || c.CreatedAt.After(newest.CreatedAt) {
-					newest = c
-					found = true
-				}
+			if c.Labels["com.claudex.signature"] != sig {
+				continue
+			}
+			if !found || c.CreatedAt.After(newest.CreatedAt) {
+				newest = c
+				found = true
 			}
 		}
 		if !found {
 			return fmt.Errorf("no running claudex container found for current workspace")
 		}
 		target = newest.Name
-	} else {
+	}
+	if target == "" {
 		cons, err := getClaudexContainers(false)
 		if err != nil {
 			return err
 		}
 		if len(cons) == 1 {
 			target = cons[0].Name
-		} else if len(cons) == 0 {
+		}
+		if target == "" && len(cons) == 0 {
 			return fmt.Errorf("no running claudex containers. Start one first.")
-		} else {
+		}
+		if target == "" {
 			var names []string
 			for _, c := range cons {
 				names = append(names, c.Name)
@@ -277,11 +282,11 @@ func toKebab(s string) string {
 		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
 			b.WriteRune(r)
 			prev = false
-		} else {
-			if !prev {
-				b.WriteByte('-')
-				prev = true
-			}
+			continue
+		}
+		if !prev {
+			b.WriteByte('-')
+			prev = true
 		}
 	}
 	out := b.String()
@@ -408,8 +413,11 @@ func containerExists(name string) (exists bool, running bool, info *containerInf
 	if m, ok := raw["State"].(map[string]any); ok {
 		if r, ok := m["Running"].(bool); ok && r {
 			state = "running"
-		} else if st, ok := m["Status"].(string); ok {
-			state = st
+		}
+		if state == "" {
+			if st, ok := m["Status"].(string); ok {
+				state = st
+			}
 		}
 	}
 	createdAt := time.Now()
@@ -528,6 +536,30 @@ func build() error {
 	return nil
 }
 
+// ensureImage checks if the 'claudex' image exists; builds it if missing.
+func ensureImage() error {
+	out, err := exec.Command("docker", "images", "-q", "claudex").Output()
+	if err != nil {
+		return fmt.Errorf("docker images check failed: %w", err)
+	}
+	if len(bytes.TrimSpace(out)) > 0 {
+		return nil
+	}
+	fmt.Println("Building 'claudex' container image...")
+	ctxDir, err := prepareBuildContext()
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(ctxDir)
+	cmd := exec.Command("docker", "build", "-t", "claudex", ctxDir)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("docker build failed: %w", err)
+	}
+	return nil
+}
+
 // runCli handles the container setup and shell attachment.
 func runCli(args []string) error {
 	// Flags
@@ -585,18 +617,22 @@ func runCli(args []string) error {
 	var mounts []string
 	// Mount Claude credentials if available
 	claudeJson := filepath.Join(home, ".claude.json")
-	if _, err := os.Stat(claudeJson); err == nil {
+	_, cjErr := os.Stat(claudeJson)
+	if cjErr == nil {
 		mounts = append(mounts, "-v", fmt.Sprintf("%s:/home/node/.claude.json", claudeJson))
-	} else {
+	}
+	if cjErr != nil {
 		fmt.Fprintf(os.Stderr, "Warning: %s not found; proceeding without it.\n", claudeJson)
 	}
 
 	// mount Claude, Codex, and Gemini config directories
 	for _, dir := range []string{"claude", "codex", "gemini"} {
 		configDir := filepath.Join(home, "."+dir)
-		if fi, err := os.Stat(configDir); err == nil && fi.IsDir() {
+		fi, err := os.Stat(configDir)
+		if err == nil && fi.IsDir() {
 			mounts = append(mounts, "-v", fmt.Sprintf("%s:/home/node/.%s", configDir, dir))
-		} else {
+		}
+		if err != nil || (fi != nil && !fi.IsDir()) {
 			fmt.Fprintf(os.Stderr, "Warning: %s not found or not a directory; proceeding without it.\n", configDir)
 		}
 	}
@@ -608,25 +644,8 @@ func runCli(args []string) error {
 	}
 
 	// Ensure the 'claudex' image exists; build if missing
-	out, err := exec.Command("docker", "images", "-q", "claudex").Output()
-	if err != nil {
-		return fmt.Errorf("docker images check failed: %w", err)
-	}
-	if len(bytes.TrimSpace(out)) == 0 {
-		fmt.Println("Building 'claudex' container image...")
-		ctxDir, err := prepareBuildContext()
-		if err != nil {
-			return err
-		}
-		defer os.RemoveAll(ctxDir)
-		cmd := exec.Command("docker", "build", "-t", "claudex", ctxDir)
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("docker build failed: %w", err)
-		}
-	} else {
-		fmt.Println("'claudex' container image already exists.")
+	if err := ensureImage(); err != nil {
+		return err
 	}
 
 	// Reuse-or-create flow
@@ -658,9 +677,11 @@ func runCli(args []string) error {
 	// Run the container in detached mode
 	runArgs := []string{"run", "--name", name, "-d", "-e", "OPENAI_API_KEY", "-e", "AI_API_MK", "-e", "GEMINI_API_KEY", "--cap-add", "NET_ADMIN", "--cap-add", "NET_RAW"}
 	// add docker sock mount
-	if _, err := os.Stat("/var/run/docker.sock"); err == nil {
+	_, sockErr := os.Stat("/var/run/docker.sock")
+	if sockErr == nil {
 		runArgs = append(runArgs, "-v", "/var/run/docker.sock:/var/run/docker.sock")
-	} else {
+	}
+	if sockErr != nil {
 		fmt.Fprintln(os.Stderr, "Warning: /var/run/docker.sock not found; Docker commands inside the container will not work. If you're on macOS with Docker Desktop, you may need to symlink the CLI socket, e.g.:\n  sudo ln -s ~/Library/Containers/com.docker.docker/Data/docker-cli.sock /var/run/docker.sock\n")
 	}
 
@@ -901,7 +922,8 @@ func destroyCommand(args []string) error {
 	var victims []containerInfo
 	if all {
 		victims = append(victims, pool...)
-	} else if byName != "" || bySig != "" {
+	}
+	if len(victims) == 0 && (byName != "" || bySig != "") {
 		for _, c := range pool {
 			if byName != "" && c.Name != byName {
 				continue
@@ -915,7 +937,8 @@ func destroyCommand(args []string) error {
 			fmt.Println("No matching containers.")
 			return nil
 		}
-	} else {
+	}
+	if len(victims) == 0 {
 		if len(pool) == 0 {
 			fmt.Println("No claudex containers match the status filter.")
 			return nil
