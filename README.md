@@ -11,61 +11,137 @@ Ensure you have the following prerequisites:
 
 ### Install CLI
 
-Option 1: Using Go
+Using Go:
 
 ```bash
 go install github.com/photodialectic/claudex@latest
 ```
 
-Option 2: From source
+Or from source:
 
 ```bash
 git clone https://github.com/photodialectic/claudex.git
 cd claudex
-./install [install_dir]   # default: /usr/local/bin
+make install
 ```
 
-Ensure `$GOPATH/bin` or `$GOBIN` is in your `PATH` if you used `go install`.
+To uninstall:
 
-### Build or update container image
+```bash
+make uninstall
+```
+
+Ensure `$GOPATH/bin` or `/usr/local/bin` is in your `PATH`.
+
+### Build container image
 
 ```bash
 claudex build
 ```
 
-Alternatively, to manually build the Docker image:
+Or using make:
 
 ```bash
-docker build -t claudex .
+make image          # Build CLI + image
+make rebuild-image  # Force rebuild image only
 ```
 
 ## Usage
 
-Launch a container session:
+### Launch Container Session
 
 ```bash
-claudex [DIR1 DIR2 ...]
+claudex [OPTIONS] [DIR1 DIR2 ...]
 ```
 
-- Mounts each `DIRi` at `/workspace/<basename(DIRi)>` inside the container.
-- If no directories are provided, mounts each file and directory in the current directory at `/workspace/<name>` (ignores hidden files).
-- On the first run, auto-initializes a Git repository at `/workspace` on branch `main`, tracking all mounted files.
-- Optionally, mount an instructions file or directory during startup. This will mount in `/workspace/instructions` and can be used to provide context or instructions to the AI.
+**Options:**
+- `--host-network` - Use host networking (allows OAuth callbacks)
+- `--name <NAME>` - Override derived container name
+- `--parallel` - Always create new container (suffix with timestamp)
+- `--replace` - Replace target container if it exists
+- `--strict-mounts` - Error if existing container mounts differ
 
-Examples:
+**Behavior:**
+- Mounts each `DIR` at `/workspace/<basename(DIR)>` inside container
+- If no directories provided, mounts current directory contents at `/workspace/<name>`
+- Auto-initializes local Git repository at `/workspace` for change tracking
+- Applies firewall to restrict network access
+- Provides `claude-code`, `codex`, and `gemini-cli` tools
 
+**Examples:**
 ```bash
-# Mount current directory and files (excluding hidden files)
-claudex
-
-# Mount multiple service folders
-claudex service1/ service2/
+claudex                              # Mount current directory
+claudex service1/ service2/          # Mount multiple directories
+claudex --host-network app/          # Enable host networking
+claudex --name myproject app/        # Custom container name
+claudex --parallel --replace app/    # Force new container
 ```
+
+### Container Management
+
+**Build/update image:**
+```bash
+claudex build
+```
+
+**List containers:**
+```bash
+claudex list [OPTIONS]
+  --all|--running|--stopped    # Filter by status
+  --format table|json|names    # Output format
+  --filter key=value           # Filter by name, signature, slug
+```
+
+**Destroy containers:**
+```bash
+claudex destroy [OPTIONS]
+  --name <NAME>           # Target specific container
+  --signature <HASH>      # Target by signature
+  --all                   # Target all containers
+  --running|--stopped     # Filter by status
+  --force                 # Skip confirmation
+  --prune-stopped         # Remove all stopped containers
+```
+
+**File operations:**
+```bash
+claudex push [--name <NAME>] <file_or_dir> [...]          # Copy to container
+claudex pull [--name <NAME>] <container_path> [dest_dir]  # Copy from container
+```
+
+### Spec-Driven Development Workflow
+
+Claudex supports spec-driven development by allowing you to share specifications with running containers:
+
+**1. Create specification locally:**
+```bash
+echo "# Project Spec" > SPEC.md
+# Edit your specification file with project requirements
+```
+
+**2. Push spec to running container:**
+```bash
+claudex push SPEC.md
+# Spec is now available at /workspace/SPEC.md inside container
+```
+
+**3. Pull updated artifacts:**
+```bash
+claudex pull /workspace/updated-files.zip ./output/
+# Retrieve AI-generated code and documentation
+```
+
+**Best practices for SPEC.md:**
+- Focus on "what" and "why", not implementation details
+- Define clear user journeys and success criteria
+- Specify constraints and organizational standards
+- Use clear, unambiguous language
+- Include measurable outcomes
 
 Inside the container:
 - A firewall is applied to restrict network access.
-- You have a persistent Git repository to commit changes.
-- Both `claude-code` and `codex` CLIs are available.
+- Local Git repository available for change tracking (local only, no remote)
+- `claude-code`, `codex`, and `gemini-cli` tools available
 
 
 ## Troubleshooting
