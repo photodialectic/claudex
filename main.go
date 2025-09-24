@@ -1070,8 +1070,14 @@ func pullCommand(args []string) error {
 			rest = append(rest, a)
 		}
 	}
+
+	target, err := pickRunningContainer(nameFlag)
+	if err != nil {
+		return err
+	}
+
 	if len(rest) == 0 {
-		return fmt.Errorf("usage: claudex pull [--name <NAME>] <container_path> [dest_dir]")
+		return interactivePull(target)
 	}
 
 	containerPath := rest[0]
@@ -1080,12 +1086,6 @@ func pullCommand(args []string) error {
 		destDir = rest[1]
 	}
 
-	target, err := pickRunningContainer(nameFlag)
-	if err != nil {
-		return err
-	}
-
-	// Ensure destination exists
 	if err := os.MkdirAll(destDir, 0755); err != nil {
 		return fmt.Errorf("cannot ensure destination %s: %v", destDir, err)
 	}
@@ -1099,4 +1099,143 @@ func pullCommand(args []string) error {
 		return fmt.Errorf("docker cp failed: %w", err)
 	}
 	return nil
+}
+
+func interactivePull(container string) error {
+	if !stdinIsTTY() {
+		return fmt.Errorf("stdin is not a TTY; specify a container path to pull")
+	}
+
+	entries, err := listWorkspaceEntries(container)
+	if err != nil {
+		return err
+	}
+	if len(entries) == 0 {
+		return fmt.Errorf("no files available under /workspace in container %s", container)
+	}
+
+	reader := bufio.NewReader(os.Stdin)
+	selections, err := promptForWorkspaceSelection(reader, entries)
+	if err != nil {
+		return err
+	}
+	if len(selections) == 0 {
+		fmt.Println("No selections made; aborting pull.")
+		return nil
+	}
+
+	destDir, err := promptForDestination(reader)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(destDir, 0755); err != nil {
+		return fmt.Errorf("cannot ensure destination %s: %v", destDir, err)
+	}
+
+	for _, entry := range selections {
+		src := fmt.Sprintf("%s:/workspace/%s", container, entry)
+		fmt.Printf("Pulling %s -> %s\n", src, destDir)
+		cmd := exec.Command("docker", "cp", src, destDir)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("docker cp failed for %s: %w", entry, err)
+		}
+	}
+	return nil
+}
+
+func listWorkspaceEntries(container string) ([]string, error) {
+	cmd := exec.Command("docker", "exec", container, "ls", "-1A", "/workspace")
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("list workspace entries: %w", err)
+	}
+	trimmed := bytes.TrimSpace(output)
+	if len(trimmed) == 0 {
+		return nil, nil
+	}
+	lines := strings.Split(string(trimmed), "\n")
+	var entries []string
+	ignores := pullIgnoreSet()
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		if ignores[line] {
+			continue
+		}
+		entries = append(entries, line)
+	}
+	sort.Strings(entries)
+	return entries, nil
+}
+
+func pullIgnoreSet() map[string]bool {
+	return map[string]bool{
+		"AGENTS.md": true,
+		"CLAUDE.md": true,
+		"GEMINI.md": true,
+	}
+}
+
+func promptForWorkspaceSelection(reader *bufio.Reader, entries []string) ([]string, error) {
+	fmt.Println("Select files or directories to pull:")
+	for i, entry := range entries {
+		fmt.Printf("  %d) %s\n", i+1, entry)
+	}
+	fmt.Println("Enter numbers separated by commas or spaces (blank to cancel):")
+	input, err := reader.ReadString('\n')
+	if err != nil {
+		return nil, err
+	}
+	input = strings.TrimSpace(input)
+	if input == "" {
+		return nil, nil
+	}
+	replaced := strings.ReplaceAll(input, ",", " ")
+	fields := strings.Fields(replaced)
+	if len(fields) == 0 {
+		return nil, nil
+	}
+	indexSet := make(map[int]struct{})
+	for _, field := range fields {
+		num, err := strconv.Atoi(field)
+		if err != nil {
+			return nil, fmt.Errorf("invalid selection '%s'", field)
+		}
+		if num < 1 || num > len(entries) {
+			return nil, fmt.Errorf("selection %d out of range", num)
+		}
+		indexSet[num-1] = struct{}{}
+	}
+	var selections []string
+	for idx := range indexSet {
+		selections = append(selections, entries[idx])
+	}
+	slices.Sort(selections)
+	return selections, nil
+}
+
+func promptForDestination(reader *bufio.Reader) (string, error) {
+	const defaultDest = "/tmp"
+	fmt.Printf("Destination directory (default %s): ", defaultDest)
+	input, err := reader.ReadString('\n')
+	if err != nil {
+		return "", err
+	}
+	input = strings.TrimSpace(input)
+	if input == "" {
+		return defaultDest, nil
+	}
+	return input, nil
+}
+
+func stdinIsTTY() bool {
+	info, err := os.Stdin.Stat()
+	if err != nil {
+		return false
+	}
+	return info.Mode()&os.ModeCharDevice != 0
 }
