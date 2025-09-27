@@ -110,3 +110,4 @@ if ! curl --connect-timeout 5 https://api.anthropic.com >/dev/null 2>&1; then
 else
     echo "Firewall verification passed - able to reach https://api.anthropic.com as expected"
 fi
+

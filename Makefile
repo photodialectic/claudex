@@ -1,18 +1,30 @@
 BIN?=claudex
 INSTALL_DIR?=/usr/local/bin
 
-.PHONY: all build image clean install uninstall
+.PHONY: all build image clean install uninstall test test-integration
 
 all: build image
 
 # Build the CLI binary
 build:
 	go mod tidy
-	go build -o $(BIN)
+	go build -o $(BIN) ./cmd/claudex
 
 # Build/update the Docker image
 image: build
-	docker build -t claudex .
+	./$(BIN) build
+
+# Run unit tests for library/CLI packages (skip root package)
+test:
+	go test ./internal/... ./cmd/...
+
+# Run integration tests (requires Docker and environment setup)
+test-integration:
+	go test -tags=integration ./...
+
+# Full test run, including root package
+test-all:
+	go test ./...
 
 # Force rebuild the Docker image directly
 rebuild-image:
