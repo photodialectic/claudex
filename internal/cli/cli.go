@@ -1,13 +1,13 @@
 package cli
 
 import (
-    "fmt"
-    "os"
-    "path/filepath"
+	"fmt"
+	"os"
+	"path/filepath"
 
-    "claudex/internal/commands"
-    "claudex/internal/dockerx"
-    "claudex/internal/run"
+	"claudex/internal/commands"
+	"claudex/internal/dockerx"
+	"claudex/internal/run"
 )
 
 // Execute is the entrypoint for the refactored CLI.
@@ -15,32 +15,32 @@ import (
 // the refactor is in progress. This entrypoint is not used by the current
 // Makefile build which still targets the legacy main.
 func Execute(args []string) error {
-    if len(args) == 0 {
-        // Default behavior: start/run container with current directory mounts
-        return run.Run(args, os.Stdin, os.Stdout, os.Stderr, &dockerx.CLI{})
-    }
-    switch args[0] {
-    case "build":
-        return commands.Build(args[1:])
-    case "push":
-        return commands.Push(args[1:])
-    case "pull":
-        return commands.Pull(args[1:])
-    case "list":
-        return commands.List(args[1:])
-    case "destroy":
-        return commands.Destroy(args[1:])
-    case "-h", "--help", "help":
-        return usage()
-    default:
-        // Default: run the container workflow using remaining args
-        return run.Run(args, os.Stdin, os.Stdout, os.Stderr, &dockerx.CLI{})
-    }
+	if len(args) == 0 {
+		// Default behavior: start/run container with current directory mounts
+		return run.Run(args, os.Stdin, os.Stdout, os.Stderr, &dockerx.CLI{})
+	}
+	switch args[0] {
+	case "build":
+		return commands.Build(args[1:])
+	case "push":
+		return commands.Push(args[1:])
+	case "pull":
+		return commands.Pull(args[1:])
+	case "list":
+		return commands.List(args[1:])
+	case "destroy":
+		return commands.Destroy(args[1:])
+	case "-h", "--help", "help":
+		return usage()
+	default:
+		// Default: run the container workflow using remaining args
+		return run.Run(args, os.Stdin, os.Stdout, os.Stderr, &dockerx.CLI{})
+	}
 }
 
 func usage() error {
-    prog := filepath.Base(os.Args[0])
-    fmt.Printf(`Usage: %s [--host-network] [--name <NAME>] [--parallel] [--replace] [--strict-mounts] [DIR1 DIR2 ...]
+	prog := filepath.Base(os.Args[0])
+	fmt.Printf(`Usage: %s [--host-network] [--name <NAME>] [--parallel] [--replace] [--strict-mounts] [DIR1 DIR2 ...]
 
 Mounts each DIRi at /workspace/<basename(DIRi)> in the claudex container.
 If no DIR is provided, mounts each file and directory in the current directory at /workspace/<name>.
@@ -72,5 +72,5 @@ List claudex containers:
 Destroy claudex containers:
   %s destroy [--name <NAME> | --signature <HASH> | --all] [--running|--stopped] [--force|--prune-stopped]
 `, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog)
-    return nil
+	return nil
 }
