@@ -11,10 +11,10 @@ import (
 	"claudex/internal/version"
 )
 
-// Execute is the entrypoint for the refactored CLI.
-// Currently a minimal dispatcher that routes subcommands to stubs while
-// the refactor is in progress. This entrypoint is not used by the current
-// Makefile build which still targets the legacy main.
+// Execute is the primary CLI dispatcher used by cmd/claudex and the
+// thin legacy wrapper in claudex/main.go. It routes top‑level
+// subcommands and falls back to the default run workflow when no
+// subcommand (or an unknown token) is provided.
 func Execute(args []string) error {
 	if len(args) == 0 {
 		// Default behavior: start/run container with current directory mounts
