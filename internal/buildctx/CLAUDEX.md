@@ -134,3 +134,4 @@ sudo docker logs myapp_web --tail=50 -f
 - **Container not found**: Check `sudo docker ps` for correct container names
 - **Network issues**: Verify firewall settings or use `--host-network`
 - **File not found**: Ensure paths are correct within the container context
+
