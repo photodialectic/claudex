@@ -158,7 +158,11 @@ func Run(args []string, in io.Reader, out, errOut io.Writer, dx dockerx.Docker) 
 				return fmt.Errorf("failed to start container: %w", err)
 			}
 			if ok := waitRunning(dx, o.Name, 5*time.Second); !ok {
-				// Fallback: replace container if it won't stay up
+				// Print recent logs to aid debugging, then replace
+				if logs, lerr := dx.Logs(o.Name, 50); lerr == nil && len(logs) > 0 {
+					fmt.Fprintln(errOut, "Recent container logs:")
+					fmt.Fprintln(errOut, string(logs))
+				}
 				fmt.Fprintln(errOut, "Container failed to stay running; recreating...")
 				_ = dx.Remove(o.Name, true)
 				goto create
@@ -186,6 +190,10 @@ create:
 		return fmt.Errorf("docker run failed: %w", err)
 	}
 	if ok := waitRunning(dx, o.Name, 5*time.Second); !ok {
+		if logs, lerr := dx.Logs(o.Name, 50); lerr == nil && len(logs) > 0 {
+			fmt.Fprintln(errOut, "Recent container logs:")
+			fmt.Fprintln(errOut, string(logs))
+		}
 		return fmt.Errorf("container %s did not stay running after creation; inspect logs and retry with --replace", o.Name)
 	}
 	// Initialize firewall rules inside container (best-effort)

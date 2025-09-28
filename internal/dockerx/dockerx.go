@@ -24,6 +24,7 @@ type Docker interface {
 	Build(tag, contextDir string, noCache bool) error
 	ExecInteractive(name string, cmd []string, in io.Reader, out, errOut io.Writer) error
 	ExecOutput(name string, cmd []string) ([]byte, error)
+	Logs(name string, tail int) ([]byte, error)
 }
 
 type Container struct {
@@ -94,6 +95,15 @@ func (CLI) ExecInteractive(name string, cmdArgs []string, in io.Reader, out, err
 
 func (CLI) ExecOutput(name string, cmdArgs []string) ([]byte, error) {
 	args := append([]string{"exec", name}, cmdArgs...)
+	return dockerOutput(args...)
+}
+
+func (CLI) Logs(name string, tail int) ([]byte, error) {
+	args := []string{"logs"}
+	if tail > 0 {
+		args = append(args, "--tail", fmt.Sprintf("%d", tail))
+	}
+	args = append(args, name)
 	return dockerOutput(args...)
 }
 

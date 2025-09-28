@@ -8,6 +8,7 @@ import (
 	"claudex/internal/commands"
 	"claudex/internal/dockerx"
 	"claudex/internal/run"
+	"claudex/internal/version"
 )
 
 // Execute is the entrypoint for the refactored CLI.
@@ -20,6 +21,9 @@ func Execute(args []string) error {
 		return run.Run(args, os.Stdin, os.Stdout, os.Stderr, &dockerx.CLI{})
 	}
 	switch args[0] {
+	case "--version", "version":
+		fmt.Println(version.Version)
+		return nil
 	case "build":
 		return commands.Build(args[1:])
 	case "push":

@@ -17,6 +17,8 @@ type Fake struct {
 	ExecInteractiveErr error
 	ExecOutputOut      []byte
 	ExecOutputErr      error
+	LogsOut            []byte
+	LogsErr            error
 }
 
 func (f *Fake) Inspect(name string) (Container, error) {
@@ -50,6 +52,8 @@ func (f *Fake) ExecInteractive(name string, cmd []string, in io.Reader, out, err
 func (f *Fake) ExecOutput(name string, cmd []string) ([]byte, error) {
 	return f.ExecOutputOut, f.ExecOutputErr
 }
+
+func (f *Fake) Logs(name string, tail int) ([]byte, error) { return f.LogsOut, f.LogsErr }
 
 // ErrNotFound is a minimal error type to simulate missing container.
 type ErrNotFound string
