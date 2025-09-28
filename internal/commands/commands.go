@@ -16,8 +16,6 @@ import (
 	"claudex/internal/ui"
 )
 
-var ErrNotImplemented = fmt.Errorf("not yet implemented: refactor in progress")
-
 func Build(args []string) error {
 	fmt.Println("Preparing build context...")
 	ctxDir, cleanup, err := buildctx.PrepareBuildContext()
