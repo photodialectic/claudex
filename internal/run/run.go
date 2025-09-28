@@ -11,6 +11,7 @@ import (
 	"claudex/internal/buildctx"
 	"claudex/internal/containers"
 	"claudex/internal/dockerx"
+	"claudex/internal/version"
 	"claudex/internal/workspace"
 )
 
@@ -109,7 +110,7 @@ func (o Options) BuildRunArgs() ([]string, error) {
 	// labels
 	b, _ := json.Marshal(o.Normalized)
 	mountsLabel := string(b)
-	args = append(args, "--label", "com.claudex.signature="+o.Signature, "--label", "com.claudex.version=0.1.0", "--label", "com.claudex.slug="+o.Slug, "--label", "com.claudex.mounts="+mountsLabel)
+	args = append(args, "--label", "com.claudex.signature="+o.Signature, "--label", "com.claudex.version="+version.Version, "--label", "com.claudex.slug="+o.Slug, "--label", "com.claudex.mounts="+mountsLabel)
 	// Image and a keepalive command to prevent immediate exit
 	// Use a very portable command
 	args = append(args, "claudex", "tail", "-f", "/dev/null")
@@ -158,29 +159,38 @@ func Run(args []string, in io.Reader, out, errOut io.Writer, dx dockerx.Docker) 
 				return fmt.Errorf("failed to start container: %w", err)
 			}
 			if ok := waitRunning(dx, o.Name, 5*time.Second); !ok {
-				// Print recent logs to aid debugging, then replace
 				if logs, lerr := dx.Logs(o.Name, 50); lerr == nil && len(logs) > 0 {
 					fmt.Fprintln(errOut, "Recent container logs:")
 					fmt.Fprintln(errOut, string(logs))
 				}
 				fmt.Fprintln(errOut, "Container failed to stay running; recreating...")
 				_ = dx.Remove(o.Name, true)
-				goto create
+				exists = false
 			}
 		}
-		fmt.Fprintln(out, "Initializing firewall...")
-		if err := dx.Exec(o.Name, "bash", "-c", "sudo /usr/local/bin/init-firewall.sh"); err != nil {
-			fmt.Fprintf(errOut, "Warning: init-firewall failed: %v\n", err)
+		if exists {
+			fmt.Fprintln(out, "Initializing firewall...")
+			if err := dx.Exec(o.Name, "bash", "-c", "sudo /usr/local/bin/init-firewall.sh"); err != nil {
+				fmt.Fprintf(errOut, "Warning: init-firewall failed: %v\n", err)
+			}
+			fmt.Fprintln(out, "Attaching shell. Type 'exit' to leave.")
+			return dx.ExecInteractive(o.Name, []string{"bash"}, in, out, errOut)
 		}
-		fmt.Fprintln(out, "Attaching shell. Type 'exit' to leave.")
-		return dx.ExecInteractive(o.Name, []string{"bash"}, in, out, errOut)
 	}
 	if exists && o.ForceReplace {
 		fmt.Fprintf(out, "Replacing existing container %s...\n", o.Name)
 		_ = dx.Remove(o.Name, true)
+		exists = false
 	}
 
-create:
+	if !exists {
+		return createAndAttach(o, in, out, errOut, dx)
+	}
+	// Should not reach here; safeguard
+	return fmt.Errorf("unexpected state; please retry with --replace")
+}
+
+func createAndAttach(o Options, in io.Reader, out, errOut io.Writer, dx dockerx.Docker) error {
 	fmt.Fprintf(out, "Creating container %s...\n", o.Name)
 	runArgs, err := o.BuildRunArgs()
 	if err != nil {
@@ -196,7 +206,6 @@ create:
 		}
 		return fmt.Errorf("container %s did not stay running after creation; inspect logs and retry with --replace", o.Name)
 	}
-	// Initialize firewall rules inside container (best-effort)
 	fmt.Fprintln(out, "Initializing firewall...")
 	if err := dx.Exec(o.Name, "bash", "-c", "sudo /usr/local/bin/init-firewall.sh"); err != nil {
 		fmt.Fprintf(errOut, "Warning: init-firewall failed: %v\n", err)
