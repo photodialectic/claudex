@@ -19,6 +19,12 @@ type Fake struct {
 	ExecOutputErr      error
 	LogsOut            []byte
 	LogsErr            error
+	ExecCalls          [][]string
+	ExecOutputCalls    [][]string
+	LogsCalls          []struct {
+		Name string
+		Tail int
+	}
 }
 
 func (f *Fake) Inspect(name string) (Container, error) {
@@ -39,8 +45,12 @@ func (f *Fake) PS(includeStopped bool) ([]string, error) {
 	return names, nil
 }
 
-func (f *Fake) Run(args ...string) error                         { return f.RunErr }
-func (f *Fake) Exec(args ...string) error                        { return f.ExecErr }
+func (f *Fake) Run(args ...string) error { return f.RunErr }
+func (f *Fake) Exec(args ...string) error {
+	call := append([]string(nil), args...)
+	f.ExecCalls = append(f.ExecCalls, call)
+	return f.ExecErr
+}
 func (f *Fake) CP(src, dst string) error                         { return f.CPErr }
 func (f *Fake) Start(name string) error                          { return f.StartErr }
 func (f *Fake) Remove(name string, force bool) error             { return f.RemoveErr }
@@ -50,10 +60,18 @@ func (f *Fake) ExecInteractive(name string, cmd []string, in io.Reader, out, err
 	return f.ExecInteractiveErr
 }
 func (f *Fake) ExecOutput(name string, cmd []string) ([]byte, error) {
+	call := append([]string{name}, cmd...)
+	f.ExecOutputCalls = append(f.ExecOutputCalls, call)
 	return f.ExecOutputOut, f.ExecOutputErr
 }
 
-func (f *Fake) Logs(name string, tail int) ([]byte, error) { return f.LogsOut, f.LogsErr }
+func (f *Fake) Logs(name string, tail int) ([]byte, error) {
+	f.LogsCalls = append(f.LogsCalls, struct {
+		Name string
+		Tail int
+	}{Name: name, Tail: tail})
+	return f.LogsOut, f.LogsErr
+}
 
 // ErrNotFound is a minimal error type to simulate missing container.
 type ErrNotFound string

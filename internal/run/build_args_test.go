@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"path/filepath"
 	"testing"
+
+	"claudex/internal/version"
 )
 
 func TestBuildRunArgsLabelsAndMounts(t *testing.T) {
@@ -21,8 +23,8 @@ func TestBuildRunArgsLabelsAndMounts(t *testing.T) {
 	if !contains(args, m1) || !contains(args, m2) {
 		t.Fatalf("missing mounts in args: %v", args)
 	}
-	// Must include labels for signature and slug
-	if !contains(args, "com.claudex.signature="+o.Signature) || !contains(args, "com.claudex.slug="+o.Slug) {
+	// Must include labels for signature, slug, and version
+	if !contains(args, "com.claudex.signature="+o.Signature) || !contains(args, "com.claudex.slug="+o.Slug) || !contains(args, "com.claudex.version="+version.Version) {
 		t.Fatalf("missing labels in args: %v", args)
 	}
 	// Mounts label should be JSON of normalized dirs
