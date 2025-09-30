@@ -21,6 +21,7 @@ type Options struct {
 	ForceReplace   bool
 	AlwaysParallel bool
 	StrictMounts   bool
+	SkipGit        bool
 	Workdirs       []string
 
 	// Derived
@@ -37,6 +38,8 @@ func ParseArgs(args []string) (Options, error) {
 		switch a {
 		case "--host-network":
 			o.UseHostNetwork = true
+		case "--no-git":
+			o.SkipGit = true
 		case "--name":
 			if i+1 >= len(args) {
 				return o, fmt.Errorf("--name requires a value")
@@ -169,6 +172,7 @@ func Run(args []string, in io.Reader, out, errOut io.Writer, dx dockerx.Docker) 
 			}
 		}
 		if exists {
+			maybeInitGit(o.SkipGit, dx, o.Name, out, errOut)
 			fmt.Fprintln(out, "Initializing firewall...")
 			if err := dx.Exec(o.Name, "bash", "-c", "sudo /usr/local/bin/init-firewall.sh"); err != nil {
 				fmt.Fprintf(errOut, "Warning: init-firewall failed: %v\n", err)
@@ -206,12 +210,35 @@ func createAndAttach(o Options, in io.Reader, out, errOut io.Writer, dx dockerx.
 		}
 		return fmt.Errorf("container %s did not stay running after creation; inspect logs and retry with --replace", o.Name)
 	}
+	maybeInitGit(o.SkipGit, dx, o.Name, out, errOut)
 	fmt.Fprintln(out, "Initializing firewall...")
 	if err := dx.Exec(o.Name, "bash", "-c", "sudo /usr/local/bin/init-firewall.sh"); err != nil {
 		fmt.Fprintf(errOut, "Warning: init-firewall failed: %v\n", err)
 	}
 	fmt.Fprintln(out, "Attaching shell. Type 'exit' to leave.")
 	return dx.ExecInteractive(o.Name, []string{"bash"}, in, out, errOut)
+}
+
+func maybeInitGit(skip bool, dx dockerx.Docker, name string, out, errOut io.Writer) {
+	if skip {
+		return
+	}
+	if _, err := dx.ExecOutput(name, []string{"bash", "-c", "test -d /workspace/.git"}); err == nil {
+		return
+	}
+	fmt.Fprintln(out, "Initializing Git repository in /workspace...")
+	if err := dx.Exec(name, "bash", "-c", "cd /workspace && git init --quiet"); err != nil {
+		fmt.Fprintf(errOut, "Warning: git init failed: %v\n", err)
+		return
+	}
+	if err := dx.Exec(name, "bash", "-c", "cd /workspace && { [ -f .gitignore ] || printf '/*.md\n' > .gitignore; }"); err != nil {
+		fmt.Fprintf(errOut, "Warning: unable to write .gitignore: %v\n", err)
+	}
+	if err := dx.Exec(name, "bash", "-c", "cd /workspace && git add -A"); err != nil {
+		fmt.Fprintf(errOut, "Warning: git add failed: %v\n", err)
+		return
+	}
+	fmt.Fprintln(out, "Initialized Git repository in /workspace and staged current contents")
 }
 
 func waitRunning(dx dockerx.Docker, name string, timeout time.Duration) bool {

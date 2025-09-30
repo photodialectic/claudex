@@ -55,6 +55,8 @@ Options:
   --parallel        Always create a new container (suffix with timestamp)
   --replace         Replace the target container if it exists
   --strict-mounts   Error if existing container mounts differ
+  --no-git          Skip initializing an empty Git repository in /workspace
+  --version         Print the Claudex CLI version and exit
 
 Examples:
   %s
