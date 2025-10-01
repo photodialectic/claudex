@@ -70,3 +70,31 @@ func TestMaybeInitGitNoopWhenExists(t *testing.T) {
 		t.Fatalf("expected no output, got %q", out.String())
 	}
 }
+
+func TestMaybeInitFirewallSkipsWhenDisabled(t *testing.T) {
+	f := &dockerx.Fake{}
+	var out, err bytes.Buffer
+	maybeInitFirewall(false, f, "c", &out, &err)
+	if len(f.ExecCalls) != 0 {
+		t.Fatalf("expected no exec calls, got %v", f.ExecCalls)
+	}
+	if !bytes.Contains(out.Bytes(), []byte("Skipping firewall")) {
+		t.Fatalf("expected skip message, got %q", out.String())
+	}
+}
+
+func TestMaybeInitFirewallRunsWhenEnabled(t *testing.T) {
+	f := &dockerx.Fake{}
+	var out, err bytes.Buffer
+	maybeInitFirewall(true, f, "c", &out, &err)
+	if len(f.ExecCalls) != 1 {
+		t.Fatalf("expected firewall exec, got %v", f.ExecCalls)
+	}
+	call := f.ExecCalls[0]
+	if len(call) < 4 || call[0] != "c" || call[1] != "bash" || call[2] != "-c" || call[3] != "sudo /usr/local/bin/init-firewall.sh" {
+		t.Fatalf("unexpected firewall call: %v", call)
+	}
+	if !bytes.Contains(out.Bytes(), []byte("Initializing firewall")) {
+		t.Fatalf("expected firewall message, got %q", out.String())
+	}
+}

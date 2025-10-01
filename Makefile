@@ -15,7 +15,7 @@ image: build
 	./$(BIN) build
 
 # Run unit tests for library/CLI packages (skip root package)
-test:
+test-unit:
 	go test ./internal/... ./cmd/...
 
 # Run integration tests (requires Docker and environment setup)
@@ -23,7 +23,7 @@ test-integration:
 	go test -tags=integration ./...
 
 # Full test run, including root package
-test-all:
+test:
 	go test ./...
 
 # Force rebuild the Docker image directly

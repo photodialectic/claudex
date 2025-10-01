@@ -173,10 +173,7 @@ func Run(args []string, in io.Reader, out, errOut io.Writer, dx dockerx.Docker) 
 		}
 		if exists {
 			maybeInitGit(o.SkipGit, dx, o.Name, out, errOut)
-			fmt.Fprintln(out, "Initializing firewall...")
-			if err := dx.Exec(o.Name, "bash", "-c", "sudo /usr/local/bin/init-firewall.sh"); err != nil {
-				fmt.Fprintf(errOut, "Warning: init-firewall failed: %v\n", err)
-			}
+			maybeInitFirewall(!o.UseHostNetwork, dx, o.Name, out, errOut)
 			fmt.Fprintln(out, "Attaching shell. Type 'exit' to leave.")
 			return dx.ExecInteractive(o.Name, []string{"bash"}, in, out, errOut)
 		}
@@ -211,10 +208,7 @@ func createAndAttach(o Options, in io.Reader, out, errOut io.Writer, dx dockerx.
 		return fmt.Errorf("container %s did not stay running after creation; inspect logs and retry with --replace", o.Name)
 	}
 	maybeInitGit(o.SkipGit, dx, o.Name, out, errOut)
-	fmt.Fprintln(out, "Initializing firewall...")
-	if err := dx.Exec(o.Name, "bash", "-c", "sudo /usr/local/bin/init-firewall.sh"); err != nil {
-		fmt.Fprintf(errOut, "Warning: init-firewall failed: %v\n", err)
-	}
+	maybeInitFirewall(!o.UseHostNetwork, dx, o.Name, out, errOut)
 	fmt.Fprintln(out, "Attaching shell. Type 'exit' to leave.")
 	return dx.ExecInteractive(o.Name, []string{"bash"}, in, out, errOut)
 }
@@ -239,6 +233,17 @@ func maybeInitGit(skip bool, dx dockerx.Docker, name string, out, errOut io.Writ
 		return
 	}
 	fmt.Fprintln(out, "Initialized Git repository in /workspace and staged current contents")
+}
+
+func maybeInitFirewall(enable bool, dx dockerx.Docker, name string, out, errOut io.Writer) {
+	if !enable {
+		fmt.Fprintln(out, "Skipping firewall setup (--host-network)")
+		return
+	}
+	fmt.Fprintln(out, "Initializing firewall...")
+	if err := dx.Exec(name, "bash", "-c", "sudo /usr/local/bin/init-firewall.sh"); err != nil {
+		fmt.Fprintf(errOut, "Warning: init-firewall failed: %v\n", err)
+	}
 }
 
 func waitRunning(dx dockerx.Docker, name string, timeout time.Duration) bool {
