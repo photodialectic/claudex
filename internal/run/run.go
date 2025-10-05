@@ -99,7 +99,7 @@ func (o Options) BuildRunArgs() ([]string, error) {
 	if fi, err := os.Stat(claudeJson); err == nil && !fi.IsDir() {
 		args = append(args, "-v", fmt.Sprintf("%s:/home/node/.claude.json", claudeJson))
 	}
-	for _, dir := range []string{"claude", "codex", "gemini"} {
+	for _, dir := range []string{"claude", "codex", "copilot", "gemini"} {
 		configDir := filepath.Join(home, "."+dir)
 		if fi, err := os.Stat(configDir); err == nil && fi.IsDir() {
 			args = append(args, "-v", fmt.Sprintf("%s:/home/node/.%s", configDir, dir))

@@ -59,8 +59,8 @@ RUN SNIPPET="export PROMPT_COMMAND='history -a' && export HISTFILE=/commandhisto
 ENV DEVCONTAINER=true
 
 # Create workspace, context, config, and instructions directories and set permissions
-RUN mkdir -p /workspace /context /home/node/.claude /home/node/.codex /home/node/.gemini /home/node/instructions && \
-  chown -R node:node /workspace /context /home/node/.claude /home/node/.codex /home/node/.gemini /home/node/instructions
+RUN mkdir -p /workspace /context /home/node/.claude /home/node/.codex /home/node/.copilot /home/node/.gemini /home/node/instructions && \
+  chown -R node:node /workspace /context /home/node/.claude /home/node/.codex /home/node/.copilot /home/node/.gemini /home/node/instructions
 
 WORKDIR /workspace
 
@@ -96,6 +96,8 @@ RUN npm install -g @openai/codex
 
 # Install Gemini
 RUN npm install -g @google/gemini-cli
+# Install Copilot
+RUN npm install -g @github/copilot
 
 COPY CLAUDEX.md /workspace/CLAUDE.md
 COPY CLAUDEX.md /workspace/AGENTS.md
