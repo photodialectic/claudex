@@ -142,7 +142,7 @@ func Run(args []string, in io.Reader, out, errOut io.Writer, dx dockerx.Docker) 
 			return err
 		}
 		defer cleanup()
-		if err := dx.Build("claudex", ctxDir, false); err != nil {
+		if err := dx.Build("claudex", ctxDir, dockerx.BuildOptions{}); err != nil {
 			return fmt.Errorf("docker build failed: %w", err)
 		}
 	}
@@ -237,7 +237,10 @@ func maybeInitGit(skip bool, dx dockerx.Docker, name string, out, errOut io.Writ
 
 func maybeInitFirewall(enable bool, dx dockerx.Docker, name string, out, errOut io.Writer) {
 	if !enable {
-		fmt.Fprintln(out, "Skipping firewall setup (--host-network)")
+		fmt.Fprintln(out, "Disabling firewall rules (--host-network)")
+		if err := dx.Exec(name, "bash", "-c", "sudo /usr/local/bin/init-firewall.sh --clear"); err != nil {
+			fmt.Fprintf(errOut, "Warning: failed to disable firewall: %v\n", err)
+		}
 		return
 	}
 	fmt.Fprintln(out, "Initializing firewall...")

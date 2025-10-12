@@ -16,6 +16,8 @@ import (
 	"claudex/internal/ui"
 )
 
+const cliRefreshArg = "CLAUDEX_REFRESH_TOKEN"
+
 func Build(args []string) error {
 	fmt.Println("Preparing build context...")
 	ctxDir, cleanup, err := buildctx.PrepareBuildContext()
@@ -36,10 +38,51 @@ func Build(args []string) error {
 	} else {
 		fmt.Println("Building image 'claudex'...")
 	}
-	if err := dx.Build("claudex", ctxDir, noCache); err != nil {
+	options := dockerx.BuildOptions{NoCache: noCache}
+	if err := dx.Build("claudex", ctxDir, options); err != nil {
 		return err
 	}
 	fmt.Println("✅ Build complete: claudex")
+	return nil
+}
+
+// Update reinstalls CLI tool layers without invalidating the entire Docker cache unless requested.
+func Update(args []string) error {
+	return updateWithDocker(&dockerx.CLI{}, args)
+}
+
+func updateWithDocker(dx dockerx.Docker, args []string) error {
+	var noCache bool
+	for _, a := range args {
+		switch a {
+		case "--no-cache":
+			noCache = true
+		default:
+			return fmt.Errorf("unknown arg: %s", a)
+		}
+	}
+
+	fmt.Println("Preparing build context...")
+	ctxDir, cleanup, err := buildctx.PrepareBuildContext()
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+
+	if noCache {
+		fmt.Println("Updating CLI tools with --no-cache...")
+	} else {
+		fmt.Println("Refreshing CLI tool layers in image 'claudex'...")
+	}
+	refreshToken := fmt.Sprintf("%d", time.Now().Unix())
+	options := dockerx.BuildOptions{
+		NoCache:   noCache,
+		BuildArgs: map[string]string{cliRefreshArg: refreshToken},
+	}
+	if err := dx.Build("claudex", ctxDir, options); err != nil {
+		return err
+	}
+	fmt.Println("✅ Update complete: CLI tools refreshed")
 	return nil
 }
 

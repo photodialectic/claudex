@@ -75,11 +75,21 @@ func TestMaybeInitFirewallSkipsWhenDisabled(t *testing.T) {
 	f := &dockerx.Fake{}
 	var out, err bytes.Buffer
 	maybeInitFirewall(false, f, "c", &out, &err)
-	if len(f.ExecCalls) != 0 {
-		t.Fatalf("expected no exec calls, got %v", f.ExecCalls)
+	if len(f.ExecCalls) != 1 {
+		t.Fatalf("expected single exec call to disable firewall, got %v", f.ExecCalls)
 	}
-	if !bytes.Contains(out.Bytes(), []byte("Skipping firewall")) {
-		t.Fatalf("expected skip message, got %q", out.String())
+	call := f.ExecCalls[0]
+	expected := []string{"c", "bash", "-c", "sudo /usr/local/bin/init-firewall.sh --clear"}
+	if len(call) != len(expected) {
+		t.Fatalf("unexpected exec call length: %v", call)
+	}
+	for i := range call {
+		if call[i] != expected[i] {
+			t.Fatalf("exec call mismatch at %d: got %q want %q", i, call[i], expected[i])
+		}
+	}
+	if !bytes.Contains(out.Bytes(), []byte("Disabling firewall")) {
+		t.Fatalf("expected disable message, got %q", out.String())
 	}
 }
 
