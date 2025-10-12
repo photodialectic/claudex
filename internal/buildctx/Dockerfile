@@ -88,16 +88,13 @@ RUN sh -c "$(wget -O- https://github.com/deluan/zsh-in-docker/releases/download/
   -a "export PROMPT_COMMAND='history -a' && export HISTFILE=/commandhistory/.bash_history" \
   -x
 
-# Install Claude
-RUN npm install -g @anthropic-ai/claude-code
-
-# Install Codex
-RUN npm install -g @openai/codex
-
-# Install Gemini
-RUN npm install -g @google/gemini-cli
-# Install Copilot
-RUN npm install -g @github/copilot
+# Install CLI toolchain; refresh token lets update builds bust cache for this layer
+ARG CLAUDEX_REFRESH_TOKEN=0
+RUN echo "Refreshing CLI tools with token ${CLAUDEX_REFRESH_TOKEN}" \
+  && npm install -g @anthropic-ai/claude-code \
+  && npm install -g @openai/codex \
+  && npm install -g @google/gemini-cli \
+  && npm install -g @github/copilot
 
 COPY CLAUDEX.md /workspace/CLAUDE.md
 COPY CLAUDEX.md /workspace/AGENTS.md
@@ -107,7 +104,9 @@ COPY CLAUDEX.md /workspace/GEMINI.md
 COPY init-firewall.sh /usr/local/bin/
 USER root
 RUN chmod +x /usr/local/bin/init-firewall.sh && \
-    echo "node ALL=(ALL) NOPASSWD: /usr/bin/docker" >> /etc/sudoers.d/node-firewall && \
-    echo "node ALL=(root) NOPASSWD: /usr/local/bin/init-firewall.sh" >> /etc/sudoers.d/node-firewall && \
+    printf '%s\n' \
+      'node ALL=(ALL) NOPASSWD: /usr/bin/docker' \
+      'node ALL=(root) NOPASSWD: /usr/local/bin/init-firewall.sh' \
+      > /etc/sudoers.d/node-firewall && \
     chmod 0440 /etc/sudoers.d/node-firewall
 USER node

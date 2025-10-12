@@ -26,6 +26,8 @@ func Execute(args []string) error {
 		return nil
 	case "build":
 		return commands.Build(args[1:])
+	case "update":
+		return commands.Update(args[1:])
 	case "push":
 		return commands.Push(args[1:])
 	case "pull":
@@ -65,8 +67,11 @@ Examples:
   %s --parallel app/ api/
   %s --replace app/ api/
 
-Build or update the Docker image:
+Build the Docker image:
   %s build [--no-cache]
+
+Refresh CLI tools without rebuilding base layers:
+  %s update [--no-cache]
 
 Push/pull files with a container:
   %s push [--name <NAME>] <file_or_dir> [...]
@@ -77,6 +82,6 @@ List claudex containers:
 
 Destroy claudex containers:
   %s destroy [--name <NAME> | --signature <HASH> | --all] [--running|--stopped] [--force|--prune-stopped]
-`, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog)
+`, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog)
 	return nil
 }

@@ -46,6 +46,14 @@ make image          # Build CLI + image
 make rebuild-image  # Force rebuild image only
 ```
 
+### Refresh CLI tools inside the image
+
+```bash
+claudex update
+```
+
+Add `--no-cache` if you want to force a full rebuild during the refresh.
+
 ## Usage
 
 ### Launch Container Session
@@ -82,6 +90,7 @@ claudex --parallel --replace app/    # Force new container
 **Build/update image:**
 ```bash
 claudex build
+claudex update
 ```
 
 **List containers:**

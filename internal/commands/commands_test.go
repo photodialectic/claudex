@@ -45,3 +45,37 @@ func TestPickRunning_AutoSelectionCases(t *testing.T) {
 
 	_ = errors.New // avoid unused import if assertions change
 }
+
+func TestUpdateWithDockerSetsRefreshToken(t *testing.T) {
+	f := &dockerx.Fake{}
+	if err := updateWithDocker(f, nil); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if f.BuildTag != "claudex" {
+		t.Fatalf("expected tag 'claudex', got %q", f.BuildTag)
+	}
+	token, ok := f.BuildOpts.BuildArgs[cliRefreshArg]
+	if !ok || token == "" {
+		t.Fatalf("expected refresh token, got map %+v", f.BuildOpts.BuildArgs)
+	}
+	if f.BuildOpts.NoCache {
+		t.Fatalf("expected NoCache to be false")
+	}
+}
+
+func TestUpdateWithDockerNoCacheFlag(t *testing.T) {
+	f := &dockerx.Fake{}
+	if err := updateWithDocker(f, []string{"--no-cache"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !f.BuildOpts.NoCache {
+		t.Fatalf("expected NoCache to be true")
+	}
+}
+
+func TestUpdateWithDockerUnknownFlag(t *testing.T) {
+	f := &dockerx.Fake{}
+	if err := updateWithDocker(f, []string{"--bogus"}); err == nil || !strings.Contains(err.Error(), "unknown arg") {
+		t.Fatalf("expected unknown arg error, got %v", err)
+	}
+}

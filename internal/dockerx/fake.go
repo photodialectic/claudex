@@ -12,6 +12,9 @@ type Fake struct {
 	StartErr           error
 	RemoveErr          error
 	BuildErr           error
+	BuildTag           string
+	BuildContext       string
+	BuildOpts          BuildOptions
 	ImageExistsVal     bool
 	ImageExistsErr     error
 	ExecInteractiveErr error
@@ -51,11 +54,16 @@ func (f *Fake) Exec(args ...string) error {
 	f.ExecCalls = append(f.ExecCalls, call)
 	return f.ExecErr
 }
-func (f *Fake) CP(src, dst string) error                         { return f.CPErr }
-func (f *Fake) Start(name string) error                          { return f.StartErr }
-func (f *Fake) Remove(name string, force bool) error             { return f.RemoveErr }
-func (f *Fake) ImageExists(tag string) (bool, error)             { return f.ImageExistsVal, f.ImageExistsErr }
-func (f *Fake) Build(tag, contextDir string, noCache bool) error { return f.BuildErr }
+func (f *Fake) CP(src, dst string) error             { return f.CPErr }
+func (f *Fake) Start(name string) error              { return f.StartErr }
+func (f *Fake) Remove(name string, force bool) error { return f.RemoveErr }
+func (f *Fake) ImageExists(tag string) (bool, error) { return f.ImageExistsVal, f.ImageExistsErr }
+func (f *Fake) Build(tag, contextDir string, opts BuildOptions) error {
+	f.BuildTag = tag
+	f.BuildContext = contextDir
+	f.BuildOpts = opts
+	return f.BuildErr
+}
 func (f *Fake) ExecInteractive(name string, cmd []string, in io.Reader, out, errOut io.Writer) error {
 	return f.ExecInteractiveErr
 }

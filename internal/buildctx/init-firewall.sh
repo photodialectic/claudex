@@ -2,14 +2,70 @@
 set -euo pipefail  # Exit on error, undefined vars, and pipeline failures
 IFS=$'\n\t'       # Stricter word splitting
 
+clear_rules() {
+  iptables -P INPUT ACCEPT
+  iptables -P OUTPUT ACCEPT
+  iptables -P FORWARD ACCEPT
+  iptables -F
+  iptables -X
+  iptables -t nat -F
+  iptables -t nat -X
+  iptables -t mangle -F
+  iptables -t mangle -X
+  ipset destroy allowed-domains 2>/dev/null || true
+}
+
+resolve_ipv4() {
+  local domain="$1"
+  local visited="${2:-}"
+
+  if [[ " $visited " == *" $domain "* ]]; then
+    echo "ERROR: Detected DNS loop while resolving $domain" >&2
+    return 1
+  fi
+
+  local records
+  if ! records=$(dig +short A "$domain"); then
+    echo "ERROR: Failed to resolve $domain" >&2
+    return 1
+  fi
+
+  if [ -z "$records" ]; then
+    echo "ERROR: Failed to resolve $domain" >&2
+    return 1
+  fi
+
+  local new_visited="$visited $domain"
+  local found=false
+
+  while read -r record; do
+    [[ -z "$record" ]] && continue
+    if [[ "$record" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
+      echo "$record"
+      found=true
+    else
+      echo "Following CNAME $record for $domain" >&2
+      if ! resolve_ipv4 "$record" "$new_visited"; then
+        return 1
+      fi
+      found=true
+    fi
+  done <<< "$records"
+
+  if [ "$found" = false ]; then
+    echo "ERROR: No IPv4 addresses found for $domain" >&2
+    return 1
+  fi
+}
+
+if [[ "${1:-}" == "--clear" ]]; then
+  clear_rules
+  echo "Firewall rules cleared"
+  exit 0
+fi
+
 # Flush existing rules and delete existing ipsets
-iptables -F
-iptables -X
-iptables -t nat -F
-iptables -t nat -X
-iptables -t mangle -F
-iptables -t mangle -X
-ipset destroy allowed-domains 2>/dev/null || true
+clear_rules
 
 # First allow DNS and localhost before any restrictions
 # Allow outbound DNS
@@ -24,31 +80,47 @@ iptables -A OUTPUT -o lo -j ACCEPT
 ipset create allowed-domains hash:net
 
 # Resolve and add other allowed domains
-for domain in \
-    "github.com" \
-    "api.openai.com" \
-    "registry.npmjs.org" \
-    "api.anthropic.com" \
-    "generativelanguage.googleapis.com" \
-    "sentry.io" \
-    "www.nickhedberg.com" \
-    "statsig.anthropic.com" \
-    "statsig.com"; do
+allowed_domains=(
+    "github.com"
+    "api.github.com"
+    "api.openai.com"
+    "registry.npmjs.org"
+    "api.anthropic.com"
+    "generativelanguage.googleapis.com"
+    "copilot-telemetry.githubusercontent.com"
+    "collector.github.com"
+    "default.exp-tas.com"
+    "copilot-proxy.githubusercontent.com"
+    "origin-tracker.githubusercontent.com"
+    "githubcopilot.com"
+    "api.githubcopilot.com"
+    "api.individual.githubcopilot.com"
+    "api.business.githubcopilot.com"
+    "api.enterprise.githubcopilot.com"
+    "sentry.io"
+    "www.nickhedberg.com"
+    "statsig.anthropic.com"
+    "statsig.com"
+)
+
+if [[ -n "${EXTRA_ALLOWED_DOMAINS:-}" ]]; then
+    for extra_domain in ${EXTRA_ALLOWED_DOMAINS}; do
+        allowed_domains+=("$extra_domain")
+    done
+fi
+
+for domain in "${allowed_domains[@]}"; do
     echo "Resolving $domain..."
-    ips=$(dig +short A "$domain")
-    if [ -z "$ips" ]; then
-        echo "ERROR: Failed to resolve $domain"
+    mapfile -t domain_ips < <(resolve_ipv4 "$domain")
+    if [ "${#domain_ips[@]}" -eq 0 ]; then
+        echo "ERROR: No IPv4 addresses found for $domain"
         exit 1
     fi
 
-    while read -r ip; do
-        if [[ ! "$ip" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
-            echo "ERROR: Invalid IP from DNS for $domain: $ip"
-            exit 1
-        fi
+    for ip in "${domain_ips[@]}"; do
         echo "Adding $ip for $domain"
-        ipset add allowed-domains "$ip"
-    done < <(echo "$ips")
+        ipset add allowed-domains "$ip" -exist
+    done
 done
 
 # Get host IP from default route
@@ -110,4 +182,3 @@ if ! curl --connect-timeout 5 https://api.anthropic.com >/dev/null 2>&1; then
 else
     echo "Firewall verification passed - able to reach https://api.anthropic.com as expected"
 fi
-

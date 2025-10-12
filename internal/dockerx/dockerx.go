@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"sort"
 	"strings"
 	"time"
 )
@@ -21,10 +22,16 @@ type Docker interface {
 	Start(name string) error
 	Remove(name string, force bool) error
 	ImageExists(tag string) (bool, error)
-	Build(tag, contextDir string, noCache bool) error
+	Build(tag, contextDir string, opts BuildOptions) error
 	ExecInteractive(name string, cmd []string, in io.Reader, out, errOut io.Writer) error
 	ExecOutput(name string, cmd []string) ([]byte, error)
 	Logs(name string, tail int) ([]byte, error)
+}
+
+// BuildOptions configures docker build behaviour.
+type BuildOptions struct {
+	NoCache   bool
+	BuildArgs map[string]string
 }
 
 type Container struct {
@@ -72,10 +79,20 @@ func (CLI) ImageExists(tag string) (bool, error) {
 	return len(bytes.TrimSpace(out)) > 0, nil
 }
 
-func (CLI) Build(tag, contextDir string, noCache bool) error {
+func (CLI) Build(tag, contextDir string, opts BuildOptions) error {
 	args := []string{"build", "-t", tag}
-	if noCache {
+	if opts.NoCache {
 		args = append(args, "--no-cache")
+	}
+	if len(opts.BuildArgs) > 0 {
+		keys := make([]string, 0, len(opts.BuildArgs))
+		for k := range opts.BuildArgs {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			args = append(args, "--build-arg", fmt.Sprintf("%s=%s", k, opts.BuildArgs[k]))
+		}
 	}
 	args = append(args, contextDir)
 	cmd := exec.Command("docker", args...)
