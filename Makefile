@@ -54,3 +54,6 @@ uninstall:
 clean:
 	rm -f $(BIN)
 	docker rmi claudex 2>/dev/null || true
+
+docker-mac:
+	sudo ln -s ~/Library/Containers/com.docker.docker/Data/docker-cli.sock /var/run/docker.sock
