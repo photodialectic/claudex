@@ -133,9 +133,35 @@ fi
 HOST_NETWORK=$(echo "$HOST_IP" | sed "s/\.[0-9]*$/.0\/24/")
 echo "Host network detected as: $HOST_NETWORK"
 
-# Set up remaining iptables rules
-iptables -A INPUT -s "$HOST_NETWORK" -j ACCEPT
-iptables -A OUTPUT -d "$HOST_NETWORK" -j ACCEPT
+# Detect all Docker bridge networks by looking at the routing table
+echo "Detecting all Docker bridge networks..."
+DOCKER_NETWORKS=()
+while IFS= read -r route; do
+    # Extract network CIDR from routes (e.g., "172.18.0.0/16")
+    if [[ "$route" =~ ^([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/[0-9]+) ]]; then
+        network="${BASH_REMATCH[1]}"
+        # Only include private IP ranges used by Docker (172.17-32.x.x, 192.168.x.x, 10.x.x.x)
+        if [[ "$network" =~ ^172\.(1[7-9]|2[0-9]|3[0-2])\. ]] || \
+           [[ "$network" =~ ^192\.168\. ]] || \
+           [[ "$network" =~ ^10\. ]]; then
+            DOCKER_NETWORKS+=("$network")
+            echo "  Found Docker network: $network"
+        fi
+    fi
+done < <(ip route show | grep -v default)
+
+# If no networks detected, fall back to just the host network
+if [ "${#DOCKER_NETWORKS[@]}" -eq 0 ]; then
+    DOCKER_NETWORKS=("$HOST_NETWORK")
+    echo "  No additional networks found, using only: $HOST_NETWORK"
+fi
+
+# Set up remaining iptables rules - allow all Docker bridge networks
+for network in "${DOCKER_NETWORKS[@]}"; do
+    echo "Allowing traffic to/from: $network"
+    iptables -A INPUT -s "$network" -j ACCEPT
+    iptables -A OUTPUT -d "$network" -j ACCEPT
+done
 
 # Set default policies to DROP first
 iptables -P INPUT DROP
