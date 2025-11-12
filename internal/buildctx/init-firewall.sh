@@ -101,6 +101,7 @@ allowed_domains=(
     "www.nickhedberg.com"
     "statsig.anthropic.com"
     "statsig.com"
+    "host.docker.internal"
 )
 
 if [[ -n "${EXTRA_ALLOWED_DOMAINS:-}" ]]; then
