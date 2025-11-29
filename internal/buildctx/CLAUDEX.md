@@ -52,6 +52,29 @@ sudo docker exec backend_service go test ./...
 ## Available Tools
 - **Docker CLI**: Full access to Docker commands (requires sudo)
 - **Git**: Pre-configured repository for LOCAL tracking only - DO NOT perform git operations
+- **Google Docs MCP server**: Run `google-docs-mcp` to launch the FastAPI/fastmcp
+  service that can create/edit Google Docs through your account. The source lives at
+  `/opt/google-docs-mcp`.
+
+### Google Docs MCP quickstart
+1. Store your Google OAuth client JSON (and optionally an existing token cache) in
+   `~/.claudex/` on the host. Claudex mounts it to `/home/node/.claudex` inside the
+   container, which is used by default for `GOOGLE_CLIENT_CREDENTIALS` and `GOOGLE_TOKEN_CACHE`.
+2. Run `google-docs-mcp` inside the container. It listens on `http://0.0.0.0:8810`
+   and exposes an MCP transport at `/mcp`. Use `claudex --host-network ...` if Google
+   needs to call back to `localhost`. For stdio-only clients, launch `google-docs-mcp --stdio`
+   (but complete OAuth while HTTP mode is active).
+3. Hit `POST /auth/start` (or call the `start_google_auth_flow` tool) to get the consent URL.
+4. Complete the browser flow; the `/auth/callback` endpoint writes cached tokens into
+   `/home/node/.claudex` (persisted from your host).
+5. Wire your MCP client to `http://localhost:8810/mcp` to use the Google Docs tools.
+   Content you send to `create/append/replace` is interpreted as Markdown and converted
+   to Docs headings, lists, and inline styles. Provide `tab_id` parameters (or call
+   `list_google_doc_tabs`) when you need to work inside specific tabs.
+6. Want a one-shot flow? Run `claudex auth google-docs-mcp [--container <name>]` on the host
+   (omit `--container` to pick from a list).
+   It starts the MCP server for you, prints the consent URL, and asks you to paste the
+   redirected localhost URL so it can finish the callback from inside the container.
 
 ## Specification-Driven Development
 When working on projects, consider writing a SPEC.md file to document requirements:
@@ -134,4 +157,3 @@ sudo docker logs myapp_web --tail=50 -f
 - **Container not found**: Check `sudo docker ps` for correct container names
 - **Network issues**: Verify firewall settings or use `--host-network`
 - **File not found**: Ensure paths are correct within the container context
-

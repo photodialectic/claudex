@@ -105,6 +105,10 @@ func (o Options) BuildRunArgs() ([]string, error) {
 			args = append(args, "-v", fmt.Sprintf("%s:/home/node/.%s", configDir, dir))
 		}
 	}
+	claudexDir := filepath.Join(home, ".claudex")
+	if fi, err := os.Stat(claudexDir); err == nil && fi.IsDir() {
+		args = append(args, "-v", fmt.Sprintf("%s:/home/node/.claudex", claudexDir))
+	}
 	// workspace mounts
 	for _, abs := range o.Normalized {
 		base := filepath.Base(abs)
