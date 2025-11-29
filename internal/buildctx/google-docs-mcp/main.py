@@ -117,6 +117,11 @@ async def auth_callback(
         await _finish()
     except AuthorizationFlowNotStarted as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    except (CredentialsFileMissing, GoogleAuthError) as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Authentication failed: " + str(exc))
+    except Exception:
+        # Log the exception here if logging is set up
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="An unexpected error occurred during authentication.")
 
     message = """
     <html>
