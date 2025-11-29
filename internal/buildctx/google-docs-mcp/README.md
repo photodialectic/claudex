@@ -85,7 +85,11 @@ The FastMCP server is mounted at `http://<host>:<port>/mcp`.  Clients that suppo
 
 Most MCP-aware clients now support HTTP transports; configure them with `transport = http` and `url = http://localhost:8810/mcp` (names/fields vary slightly per client).
 
-> Tip: When running inside Claudex without host networking, start your container with `--host-network` so Google can reach `http://localhost:<port>/auth/callback`. If you run `--stdio`, the REST endpoints are disabled, so complete OAuth while the server is in HTTP mode first. All document body inputs are treated as Markdown; plain text still works, but headings/bullets/bold italicize automatically when you use Markdown syntax. Use the `tab_id` parameters (or the `list_google_doc_tabs` tool / `GET /docs/{id}/tabs` endpoint) to work with documents that have multiple tabs.
+> **Tips:**
+> - When running inside Claudex without host networking, start your container with `--host-network` so Google can reach `http://localhost:<port>/auth/callback`.
+> - If you run `--stdio`, the REST endpoints are disabled, so complete OAuth while the server is in HTTP mode first.
+> - All document body inputs are treated as Markdown; plain text still works, but headings/bullets/bold italicize automatically when you use Markdown syntax.
+> - Use the `tab_id` parameters (or the `list_google_doc_tabs` tool / `GET /docs/{id}/tabs` endpoint) to work with documents that have multiple tabs.
 
 ### Hacking / Local Development
 The source lives in this repository at `internal/buildctx/google-docs-mcp`. If you
