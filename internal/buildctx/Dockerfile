@@ -57,8 +57,6 @@ RUN SNIPPET="export PROMPT_COMMAND='history -a' && export HISTFILE=/commandhisto
 
 # Set `DEVCONTAINER` environment variable to help with orientation
 ENV DEVCONTAINER=true
-ENV GOOGLE_CLIENT_CREDENTIALS=/home/node/.claudex/google_oauth_client.json
-ENV GOOGLE_TOKEN_CACHE=/home/node/.claudex/google-docs-token.json
 
 # Create workspace, context, config, and instructions directories and set permissions
 RUN mkdir -p /workspace /context /home/node/.claude /home/node/.codex /home/node/.copilot /home/node/.gemini /home/node/.claudex /home/node/instructions && \
@@ -79,7 +77,7 @@ RUN chown -R node:node ${GOOGLE_DOCS_MCP_HOME} && \
       '#!/bin/bash' \
       'set -euo pipefail' \
       'cd '"${GOOGLE_DOCS_MCP_HOME}" \
-      'exec uv run -- python main.py "$@"' \
+      'exec .venv/bin/python main.py "$@"' \
       > /usr/local/bin/google-docs-mcp && \
     chmod +x /usr/local/bin/google-docs-mcp
 
@@ -104,9 +102,9 @@ RUN sh -c "$(wget -O- https://github.com/deluan/zsh-in-docker/releases/download/
   -a "export PROMPT_COMMAND='history -a' && export HISTFILE=/commandhistory/.bash_history" \
   -x
 
-# Install CLI toolchain; refresh token lets update builds bust cache for this layer
-ARG CLAUDEX_REFRESH_TOKEN=0
-RUN echo "Refreshing CLI tools with token ${CLAUDEX_REFRESH_TOKEN}" \
+# Install CLI toolchain; build arg lets update builds bust cache for this layer
+ARG CLAUDEX_BUILD_VERSION=0
+RUN echo "Installing CLI tools (build version: ${CLAUDEX_BUILD_VERSION})" \
   && npm install -g @anthropic-ai/claude-code \
   && npm install -g @openai/codex \
   && npm install -g @google/gemini-cli \
