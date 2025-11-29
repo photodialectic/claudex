@@ -15,160 +15,23 @@ def _doc_url(document_id: str) -> str:
     return f"https://docs.google.com/document/d/{document_id}/edit"
 
 
-def _is_code_block_paragraph(paragraph: dict) -> bool:
-    """Check if a paragraph is a code block."""
-    # Check for native Google Docs code blocks (U+E907 marker)
-    elements = paragraph.get("elements", [])
-    if elements:
-        first_element = elements[0]
-        if "textRun" in first_element:
-            content = first_element["textRun"].get("content", "")
-            # Check for the code block marker character
-            if content and content[0] == '\ue907':
-                return True
-
-            # Check for our custom code blocks (monospace + gray background)
-            text_style = first_element["textRun"].get("textStyle", {})
-            font_family = text_style.get("weightedFontFamily", {}).get("fontFamily", "")
-            bg_color = text_style.get("backgroundColor", {}).get("color", {}).get("rgbColor", {})
-
-            has_monospace = "Mono" in font_family or "Courier" in font_family
-            has_gray_bg = (
-                bg_color.get("red", 0) > 0.9 and
-                bg_color.get("green", 0) > 0.9 and
-                bg_color.get("blue", 0) > 0.9
-            )
-
-            if has_monospace and has_gray_bg:
-                return True
-
-    return False
-
-
-def _extract_text_from_table(table: dict) -> str:
-    """Extract text content from a table."""
-    text_parts = []
-    for row in table.get("tableRows", []):
-        for cell in row.get("tableCells", []):
-            for content_element in cell.get("content", []):
-                if "paragraph" in content_element:
-                    para = content_element["paragraph"]
-                    for element in para.get("elements", []):
-                        if "textRun" in element:
-                            text = element["textRun"].get("content", "")
-                            if text:
-                                text_parts.append(text)
-    return "".join(text_parts)
-
-
-def _is_code_block_table(table: dict) -> bool:
-    """Check if a 1x1 table with monospace font is a code block."""
-    rows = table.get("tableRows", [])
-    # Must be a single row
-    if len(rows) != 1:
-        return False
-
-    cells = rows[0].get("tableCells", [])
-    # Must be a single column
-    if len(cells) != 1:
-        return False
-
-    # Check if the cell has gray background
-    cell_style = cells[0].get("tableCellStyle", {})
-    bg_color = cell_style.get("backgroundColor", {}).get("color", {}).get("rgbColor", {})
-    has_gray_bg = (
-        bg_color.get("red", 0) > 0.9 and
-        bg_color.get("green", 0) > 0.9 and
-        bg_color.get("blue", 0) > 0.9
-    )
-
-    # Check if content uses monospace font
-    has_monospace = False
-    for content_element in cells[0].get("content", []):
-        if "paragraph" in content_element:
-            para = content_element["paragraph"]
-            for element in para.get("elements", []):
-                if "textRun" in element:
-                    text_style = element["textRun"].get("textStyle", {})
-                    font_family = text_style.get("weightedFontFamily", {}).get("fontFamily", "")
-                    if "Mono" in font_family or "Courier" in font_family:
-                        has_monospace = True
-                        break
-
-    return has_gray_bg and has_monospace
-
-
 def _extract_plain_text(document: dict) -> str:
-    """Flatten Doc body content into plaintext, preserving code block markers."""
+    """Flatten Doc body content into a simple plaintext string.
+
+    Note: This is only used as a fallback. The Drive API markdown export
+    is preferred as it preserves all formatting.
+    """
     chunks: list[str] = []
-    in_code_block = False
-
     for body_element in document.get("body", {}).get("content", []):
-        # Handle tables (potential code blocks)
-        if "table" in body_element:
-            table = body_element["table"]
-            is_code_table = _is_code_block_table(table)
-
-            if is_code_table:
-                chunks.append("```\n")
-                chunks.append(_extract_text_from_table(table))
-                chunks.append("```\n")
-            else:
-                # Regular table - just extract text without code markers
-                chunks.append(_extract_text_from_table(table))
-            continue
-
-        # Handle paragraphs
         paragraph = body_element.get("paragraph")
         if not paragraph:
             continue
-
-        # Check paragraph style for headings
-        para_style = paragraph.get("paragraphStyle", {})
-        named_style = para_style.get("namedStyleType", "")
-
-        # Check if this paragraph uses the CODE named style (native code blocks)
-        is_code_paragraph = _is_code_block_paragraph(paragraph)
-
-        # Extract text content
-        paragraph_text_parts = []
-        for i, element in enumerate(paragraph.get("elements", [])):
+        for element in paragraph.get("elements", []):
             text_run = element.get("textRun")
             if text_run:
-                text = text_run.get("content", "")
+                text = text_run.get("content")
                 if text:
-                    # Skip the code block marker character (U+E907) at the start
-                    if i == 0 and is_code_paragraph and text[0] == '\ue907':
-                        text = text[1:]  # Remove the marker
-                    if text:
-                        paragraph_text_parts.append(text)
-
-        paragraph_text = "".join(paragraph_text_parts).rstrip("\n")
-
-        # Handle transitions between code and non-code
-        if is_code_paragraph and not in_code_block:
-            chunks.append("```\n")
-            in_code_block = True
-        elif not is_code_paragraph and in_code_block:
-            chunks.append("```\n")
-            in_code_block = False
-
-        if paragraph_text:
-            # Add heading markers based on style
-            if named_style.startswith("HEADING_"):
-                level = named_style.replace("HEADING_", "")
-                if level.isdigit():
-                    heading_marker = "#" * int(level)
-                    chunks.append(f"{heading_marker} {paragraph_text}\n\n")
-                else:
-                    chunks.append(f"{paragraph_text}\n")
-            else:
-                chunks.append(f"{paragraph_text}\n")
-
-    # Close any open code block
-    if in_code_block:
-        chunks.append("```\n")
-
+                    chunks.append(text)
     return "".join(chunks).strip()
 
 

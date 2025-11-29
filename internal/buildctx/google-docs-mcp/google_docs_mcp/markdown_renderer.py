@@ -247,39 +247,9 @@ def build_markdown_requests(
             i = _render_list(builder, tokens, i, list_type="ordered")
         elif token.type == "fence":
             code_text = token.content.rstrip("\n")
-            if code_text:
-                # Simpler approach: just use monospace font + gray background on the paragraph
-                # Create span for monospace font styling and background
-                code_span = Span(
-                    0,
-                    len(code_text),
-                    {
-                        "weightedFontFamily": {
-                            "fontFamily": "Roboto Mono",
-                            "weight": 400,
-                        },
-                        "fontSize": {"magnitude": 9, "unit": "PT"},
-                        "backgroundColor": {
-                            "color": {
-                                "rgbColor": {
-                                    "red": 0.95,
-                                    "green": 0.95,
-                                    "blue": 0.95,
-                                }
-                            }
-                        },
-                    },
-                )
-                # Add indentation to make it look like a block
-                paragraph_style = {
-                    "indentStart": {"magnitude": 18, "unit": "PT"},
-                    "indentEnd": {"magnitude": 18, "unit": "PT"},
-                    "spaceAbove": {"magnitude": 6, "unit": "PT"},
-                    "spaceBelow": {"magnitude": 6, "unit": "PT"},
-                }
-                builder.add_paragraph(
-                    code_text, paragraph_style=paragraph_style, spans=[code_span]
-                )
+            # Note: This renderer is rarely used now that we use Drive API
+            # for markdown conversion. Just render as plain text.
+            builder.add_paragraph(code_text)
             i += 1
         else:
             i += 1
