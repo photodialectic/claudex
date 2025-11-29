@@ -5,6 +5,7 @@ from typing import Iterable, Iterator, Optional
 
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
+from googleapiclient.http import MediaInMemoryUpload
 
 from .auth import GoogleAuthManager, auth_manager
 from .exceptions import GoogleDocsError, MissingGoogleCredentials
@@ -16,7 +17,11 @@ def _doc_url(document_id: str) -> str:
 
 
 def _extract_plain_text(document: dict) -> str:
-    """Flatten Doc body content into a simple plaintext string."""
+    """Flatten Doc body content into a simple plaintext string.
+
+    Note: This is only used as a fallback. The Drive API markdown export
+    is preferred as it preserves all formatting.
+    """
     chunks: list[str] = []
     for body_element in document.get("body", {}).get("content", []):
         paragraph = body_element.get("paragraph")
@@ -71,6 +76,13 @@ class GoogleDocsService:
             return build("docs", "v1", credentials=creds, cache_discovery=False)
         except Exception as exc:  # pragma: no cover - safety net
             raise GoogleDocsError(f"Failed to initialize Docs client: {exc}") from exc
+
+    def _drive_client(self):
+        creds = self.auth.require_credentials()
+        try:
+            return build("drive", "v3", credentials=creds, cache_discovery=False)
+        except Exception as exc:  # pragma: no cover - safety net
+            raise GoogleDocsError(f"Failed to initialize Drive client: {exc}") from exc
 
     def _get_document(
         self,
@@ -161,27 +173,52 @@ class GoogleDocsService:
     def create_document(
         self, title: str, initial_text: str | None = None
     ) -> DocumentSummary:
-        service = self._client()
+        """Create a new Google Doc, optionally with markdown content.
+
+        Note: Uses Drive API markdown conversion for initial_text, which provides
+        full formatting support but does not support tabs.
+        """
         try:
-            doc = service.documents().create(body={"title": title}).execute()
-            doc_id = doc["documentId"]
-            tabs = doc.get("tabs") or []
+            if initial_text:
+                # Use Drive API to create doc from markdown
+                drive_service = self._drive_client()
+
+                file_metadata = {
+                    "name": title,
+                    "mimeType": "application/vnd.google-apps.document"
+                }
+
+                # Create file with markdown content
+                media = MediaInMemoryUpload(
+                    initial_text.encode("utf-8"),
+                    mimetype="text/markdown",
+                    resumable=True
+                )
+
+                doc = drive_service.files().create(
+                    body=file_metadata,
+                    media_body=media,
+                    fields="id,name"
+                ).execute()
+
+                doc_id = doc["id"]
+            else:
+                # No content, use Docs API to create empty doc
+                service = self._client()
+                doc = service.documents().create(body={"title": title}).execute()
+                doc_id = doc["documentId"]
+
+            # Get document to retrieve tab info
+            service = self._client()
+            full_doc = service.documents().get(documentId=doc_id).execute()
+            tabs = full_doc.get("tabs") or []
             default_tab_id = None
             if tabs:
                 default_tab_id = tabs[0].get("tabProperties", {}).get("tabId")
-            if initial_text:
-                requests, _ = build_markdown_requests(
-                    initial_text,
-                    start_index=1,
-                    tab_id=default_tab_id,
-                )
-                if requests:
-                    service.documents().batchUpdate(
-                        documentId=doc_id, body={"requests": requests}
-                    ).execute()
+
             return DocumentSummary(
                 document_id=doc_id,
-                title=doc.get("title"),
+                title=title,
                 url=_doc_url(doc_id),
                 tab_id=default_tab_id,
             )
@@ -191,64 +228,95 @@ class GoogleDocsService:
     def append_text(
         self, document_id: str, text: str, tab_id: str | None = None
     ) -> DocumentSummary:
+        """Append markdown text to a document.
+
+        Note: This uses a read-modify-write approach (fetch entire document,
+        append text, replace entire document). For large documents, this is
+        less efficient than direct insertion but provides full markdown
+        formatting support. Tab operations are not supported.
+
+        Args:
+            document_id: The Google Doc ID
+            text: Markdown text to append
+            tab_id: Must be None (tabs not supported)
+
+        Raises:
+            GoogleDocsError: If tab_id is not None
+        """
         try:
-            service = self._client()
-            doc = self._get_document(document_id, include_tabs=True, service=service)
-            tab, effective_tab_id = self._resolve_tab(doc, tab_id)
-            body_source = self._tab_body(doc, tab)
-            end_index = self._body_end_index(body_source)
-            start_index = max(end_index - 1, 1)
-            prepend_newline = end_index > 2
-            requests, _ = build_markdown_requests(
-                text,
-                start_index=start_index,
-                prepend_newline=prepend_newline,
-                tab_id=effective_tab_id,
-            )
-            if requests:
-                service.documents().batchUpdate(
-                    documentId=document_id,
-                    body={"requests": requests},
-                ).execute()
-            return DocumentSummary(
-                document_id=document_id,
-                title=doc.get("title"),
-                url=_doc_url(document_id),
-                tab_id=effective_tab_id,
-            )
+            # Validate tab_id
+            if tab_id is not None:
+                raise GoogleDocsError(
+                    "Tab-specific append operations are not supported. "
+                    "Drive API markdown operations work on entire documents. "
+                    "Use tab_id=None to append to the entire document."
+                )
+
+            # Use read + append + replace approach with Drive API
+            # 1. Read current content as markdown
+            current_doc = self.fetch_document(document_id, tab_id)
+            current_content = current_doc.content
+
+            # 2. Append new text (add newlines if needed)
+            if current_content and not current_content.endswith("\n\n"):
+                if current_content.endswith("\n"):
+                    combined_content = current_content + "\n" + text
+                else:
+                    combined_content = current_content + "\n\n" + text
+            else:
+                combined_content = current_content + text
+
+            # 3. Replace document with combined content
+            return self.replace_document(document_id, combined_content, tab_id)
+
         except HttpError as exc:
             raise GoogleDocsError(exc.reason) from exc
 
     def replace_document(
         self, document_id: str, text: str, tab_id: str | None = None
     ) -> DocumentSummary:
+        """Replace entire document content with markdown text.
+
+        Note: Drive API markdown import replaces the entire document and does not
+        support tab-specific operations. If tab_id is provided, an error is raised.
+
+        Args:
+            document_id: The Google Doc ID
+            text: Markdown text to replace document with
+            tab_id: Must be None (tabs not supported)
+
+        Raises:
+            GoogleDocsError: If tab_id is not None
+        """
         try:
-            service = self._client()
-            doc = self._get_document(document_id, include_tabs=True, service=service)
-            tab, effective_tab_id = self._resolve_tab(doc, tab_id)
-            body_source = self._tab_body(doc, tab)
-            end_index = self._body_end_index(body_source)
-            requests: list[dict] = []
-            if end_index > 1:
-                requests.append(
-                    {
-                        "deleteContentRange": {
-                            "range": self._create_delete_range(
-                                effective_tab_id, end_index
-                            )
-                        }
-                    }
+            # Validate tab_id
+            if tab_id is not None:
+                raise GoogleDocsError(
+                    "Tab-specific replace operations are not supported. "
+                    "Drive API markdown import replaces the entire document. "
+                    "Use tab_id=None to replace the entire document."
                 )
-            markdown_requests, _ = build_markdown_requests(
-                text,
-                start_index=1,
-                tab_id=effective_tab_id,
+
+            # Use Drive API to update doc with markdown content
+            drive_service = self._drive_client()
+            docs_service = self._client()
+
+            # Get document for metadata
+            doc = self._get_document(document_id, include_tabs=True, service=docs_service)
+            tab, effective_tab_id = self._resolve_tab(doc, tab_id)
+
+            # Update file with markdown content using Drive API
+            media = MediaInMemoryUpload(
+                text.encode("utf-8"),
+                mimetype="text/markdown",
+                resumable=True
             )
-            requests.extend(markdown_requests)
-            if requests:
-                service.documents().batchUpdate(
-                    documentId=document_id, body={"requests": requests}
-                ).execute()
+
+            drive_service.files().update(
+                fileId=document_id,
+                media_body=media
+            ).execute()
+
             return DocumentSummary(
                 document_id=document_id,
                 title=doc.get("title"),
@@ -261,12 +329,44 @@ class GoogleDocsService:
     def fetch_document(
         self, document_id: str, tab_id: str | None = None
     ) -> DocumentContent:
+        """Fetch document content as markdown.
+
+        Note: Drive API markdown export exports the entire document and does not
+        support tab-specific exports. If tab_id is provided, an error is raised.
+
+        Args:
+            document_id: The Google Doc ID
+            tab_id: Must be None (tabs not supported)
+
+        Raises:
+            GoogleDocsError: If tab_id is not None
+        """
         try:
-            service = self._client()
-            doc = self._get_document(document_id, include_tabs=True, service=service)
+            # Validate tab_id
+            if tab_id is not None:
+                raise GoogleDocsError(
+                    "Tab-specific fetch operations are not supported. "
+                    "Drive API markdown export exports the entire document. "
+                    "Use tab_id=None to fetch the entire document."
+                )
+
+            # Use Drive API to export as markdown
+            drive_service = self._drive_client()
+            docs_service = self._client()
+
+            # Get document metadata for title
+            doc = self._get_document(document_id, include_tabs=True, service=docs_service)
             tab, effective_tab_id = self._resolve_tab(doc, tab_id)
-            body_source = self._tab_body(doc, tab)
-            text = _extract_plain_text(body_source)
+
+            # Export document as markdown using Drive API
+            markdown_content = drive_service.files().export(
+                fileId=document_id,
+                mimeType="text/markdown"
+            ).execute()
+
+            # Decode bytes to string
+            text = markdown_content.decode("utf-8") if isinstance(markdown_content, bytes) else markdown_content
+
             return DocumentContent(
                 document_id=document_id,
                 title=doc.get("title"),

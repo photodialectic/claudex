@@ -247,6 +247,8 @@ def build_markdown_requests(
             i = _render_list(builder, tokens, i, list_type="ordered")
         elif token.type == "fence":
             code_text = token.content.rstrip("\n")
+            # Note: This renderer is rarely used now that we use Drive API
+            # for markdown conversion. Just render as plain text.
             builder.add_paragraph(code_text)
             i += 1
         else:
