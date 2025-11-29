@@ -57,10 +57,12 @@ RUN SNIPPET="export PROMPT_COMMAND='history -a' && export HISTFILE=/commandhisto
 
 # Set `DEVCONTAINER` environment variable to help with orientation
 ENV DEVCONTAINER=true
+ENV GOOGLE_CLIENT_CREDENTIALS=/home/node/.claudex/google_oauth_client.json
+ENV GOOGLE_TOKEN_CACHE=/home/node/.claudex/google-docs-token.json
 
 # Create workspace, context, config, and instructions directories and set permissions
-RUN mkdir -p /workspace /context /home/node/.claude /home/node/.codex /home/node/.copilot /home/node/.gemini /home/node/instructions && \
-  chown -R node:node /workspace /context /home/node/.claude /home/node/.codex /home/node/.copilot /home/node/.gemini /home/node/instructions
+RUN mkdir -p /workspace /context /home/node/.claude /home/node/.codex /home/node/.copilot /home/node/.gemini /home/node/.claudex /home/node/instructions && \
+  chown -R node:node /workspace /context /home/node/.claude /home/node/.codex /home/node/.copilot /home/node/.gemini /home/node/.claudex /home/node/instructions
 
 WORKDIR /workspace
 
@@ -69,12 +71,26 @@ RUN ARCH=$(dpkg --print-architecture) && \
   dpkg -i "git-delta_0.18.2_${ARCH}.deb" && \
   rm "git-delta_0.18.2_${ARCH}.deb"
 
+# Make Google Docs MCP server files available in the container
+ENV GOOGLE_DOCS_MCP_HOME=/opt/google-docs-mcp
+COPY google-docs-mcp ${GOOGLE_DOCS_MCP_HOME}
+RUN chown -R node:node ${GOOGLE_DOCS_MCP_HOME} && \
+    printf '%s\n' \
+      '#!/bin/bash' \
+      'set -euo pipefail' \
+      'cd '"${GOOGLE_DOCS_MCP_HOME}" \
+      'exec uv run -- python main.py "$@"' \
+      > /usr/local/bin/google-docs-mcp && \
+    chmod +x /usr/local/bin/google-docs-mcp
+
 # Set up non-root user
 USER node
 
 # Install global packages
 ENV NPM_CONFIG_PREFIX=/usr/local/share/npm-global
-ENV PATH=$PATH:/usr/local/share/npm-global/bin
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+ENV PATH=/home/node/.local/bin:/usr/local/share/npm-global/bin:$PATH
+RUN cd ${GOOGLE_DOCS_MCP_HOME} && uv sync --frozen
 
 # Set the default shell to bash rather than sh
 ENV SHELL=/bin/zsh
