@@ -69,8 +69,6 @@ class GoogleDocsService:
         creds = self.auth.require_credentials()
         try:
             return build("docs", "v1", credentials=creds, cache_discovery=False)
-        except MissingGoogleCredentials as exc:
-            raise exc
         except Exception as exc:  # pragma: no cover - safety net
             raise GoogleDocsError(f"Failed to initialize Docs client: {exc}") from exc
 
