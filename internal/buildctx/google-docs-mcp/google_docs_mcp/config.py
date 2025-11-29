@@ -56,7 +56,7 @@ class Settings(BaseSettings):
     scopes: List[str] = Field(
         default_factory=lambda: [
             "https://www.googleapis.com/auth/documents",
-            "https://www.googleapis.com/auth/drive.metadata.readonly",
+            "https://www.googleapis.com/auth/drive.file",
         ],
         alias="GOOGLE_OAUTH_SCOPES",
         description="OAuth scopes requested during consent.",
