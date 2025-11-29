@@ -23,7 +23,7 @@ from google_docs_mcp.exceptions import (
     GoogleAuthError,
     GoogleDocsError,
 )
-from google_docs_mcp.config import Settings, settings
+from google_docs_mcp.config import settings
 
 
 # --------------------------------------------------------------------------- #
