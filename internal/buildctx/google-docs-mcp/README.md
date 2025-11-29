@@ -24,6 +24,12 @@ Dependencies are pre-synced in the Claudex container image and the helper comman
 > Keep your Google OAuth client and tokens under `~/.claudex` on the host. Claudex
 > automatically mounts it to `/home/node/.claudex` inside the container, which is now the
 > default location for the server’s `GOOGLE_CLIENT_CREDENTIALS` and `GOOGLE_TOKEN_CACHE`.
+>
+> Need a quick OAuth helper? Run `claudex auth google-docs-mcp [--container <name>]` on the host
+> (omit the flag to pick from a list).
+> It launches this server inside the specified container, prints the consent URL, and
+> prompts you to paste the redirected `localhost` URL so it can finish the callback
+> from inside the container and persist tokens to `~/.claudex`.
 
 ```bash
 # inside a Claudex container

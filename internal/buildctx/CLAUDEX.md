@@ -71,6 +71,10 @@ sudo docker exec backend_service go test ./...
    Content you send to `create/append/replace` is interpreted as Markdown and converted
    to Docs headings, lists, and inline styles. Provide `tab_id` parameters (or call
    `list_google_doc_tabs`) when you need to work inside specific tabs.
+6. Want a one-shot flow? Run `claudex auth google-docs-mcp [--container <name>]` on the host
+   (omit `--container` to pick from a list).
+   It starts the MCP server for you, prints the consent URL, and asks you to paste the
+   redirected localhost URL so it can finish the callback from inside the container.
 
 ## Specification-Driven Development
 When working on projects, consider writing a SPEC.md file to document requirements:

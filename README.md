@@ -182,6 +182,10 @@ read, and update Google Docs through your account.
   or Claude to that transport to get the `start_google_auth_flow`, `create_google_doc`,
   `append_google_doc`, `replace_google_doc`, `read_google_doc`, and
   `list_google_doc_tabs` tools.
+- Run `claudex auth google-docs-mcp [--container <name>]` for a guided OAuth flow (omit
+  `--container` to pick from a list). The command starts
+  the MCP server in your container, prints the Google consent link, and prompts you to
+  paste the redirected URL so it can finish the callback and write tokens into `~/.claudex`.
 
 The server also exposes REST endpoints for `/health`, `/auth/start`, `/auth/status`,
 `/auth/callback`, and `/docs/*` which makes it easy to test outside of MCP clients.

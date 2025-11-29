@@ -36,6 +36,8 @@ func Execute(args []string) error {
 		return commands.List(args[1:])
 	case "destroy":
 		return commands.Destroy(args[1:])
+	case "auth":
+		return commands.Auth(args[1:])
 	case "-h", "--help", "help":
 		return usage()
 	default:
@@ -82,6 +84,9 @@ List claudex containers:
 
 Destroy claudex containers:
   %s destroy [--name <NAME> | --signature <HASH> | --all] [--running|--stopped] [--force|--prune-stopped]
-`, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog)
+
+Guided Google Docs OAuth:
+  %s auth google-docs-mcp [--container <NAME>]
+`, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog)
 	return nil
 }
