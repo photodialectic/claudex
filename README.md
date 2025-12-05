@@ -190,6 +190,42 @@ read, and update Google Docs through your account.
 The server also exposes REST endpoints for `/health`, `/auth/start`, `/auth/status`,
 `/auth/callback`, and `/docs/*` which makes it easy to test outside of MCP clients.
 
+### Docker MCP Gateway
+Docker has an [MCP Gateway](https://github.com/docker/mcp-gateway/blob/main/docs/mcp-gateway.md) you can run on your host and then connect Codex or Claude to it as an MCP server. What nice about this is you can run a single instance of the gateway and have multiple containers connect to it as MCP servers without needing to run separate MCP servers in each container.
+
+A current limitation is the MCP Gateway will generate a new API key each time it starts up, so you'll need to update your clients with the new key each time. Hopefully this is addressed in the future.
+
+#### Run the Gateway
+
+```bash
+docker mcp gateway run --port 8080 --transport streaming --verbose --log-calls --watch
+```
+
+### Configuer Codex
+In `~/.codex/config.toml`, add the following:
+
+```toml
+[mcp_servers.docker_gateway]
+transport = "http"
+url = "http://host.docker.internal:8080/mcp"
+http_headers = { Authorization = "Bearer <TOKEN>" }
+```
+
+#### Configure Claude
+In `~/.claude.json`, add the following:
+
+```json
+"mcpServers": {
+  "DockerMCPGateway": {
+    "type": "http",
+    "url": "http://host.docker.internal:8080/mcp",
+    "headers": {
+      "Authorization": "Bearer <TOKEN>"
+    }
+  }
+}
+```
+
 ### Dockerized MCP Servers
 Following [Dockerized MCP Servers](https://hub.docker.com/mcp), this will follow the example of the [Fetch Docker MCP](https://hub.docker.com/mcp/server/fetch/overview).
 
