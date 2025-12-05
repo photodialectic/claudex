@@ -201,7 +201,7 @@ A current limitation is the MCP Gateway will generate a new API key each time it
 docker mcp gateway run --port 8080 --transport streaming --verbose --log-calls --watch
 ```
 
-### Configuer Codex
+### Configure Codex
 In `~/.codex/config.toml`, add the following:
 
 ```toml
