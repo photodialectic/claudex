@@ -191,7 +191,7 @@ The server also exposes REST endpoints for `/health`, `/auth/start`, `/auth/stat
 `/auth/callback`, and `/docs/*` which makes it easy to test outside of MCP clients.
 
 ### Docker MCP Gateway
-Docker has an [MCP Gateway](https://github.com/docker/mcp-gateway/blob/main/docs/mcp-gateway.md) you can run on your host and then connect Codex or Claude to it as an MCP server. What nice about this is you can run a single instance of the gateway and have multiple containers connect to it as MCP servers without needing to run separate MCP servers in each container.
+Docker has an [MCP Gateway](https://github.com/docker/mcp-gateway/blob/main/docs/mcp-gateway.md) you can run on your host and then connect Codex or Claude to it as an MCP server. What's nice about this is you can run a single instance of the gateway and have multiple containers connect to it as MCP servers without needing to run separate MCP servers in each container.
 
 A current limitation is the MCP Gateway will generate a new API key each time it starts up, so you'll need to update your clients with the new key each time. Hopefully this is addressed in the future.
 
