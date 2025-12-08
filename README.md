@@ -215,7 +215,7 @@ services:
 You can run this on your host and you can configure the port to whatever makes sense for your setup.
 
 ```bash
-docker compose -f ~/.claudex/mcp-gateway.yaml up -d
+docker compose -f ~/.claudex/compose/mcp-gateway.yml up -d
 ```
 
 ### Configure Codex
