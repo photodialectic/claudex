@@ -193,7 +193,7 @@ The server also exposes REST endpoints for `/health`, `/auth/start`, `/auth/stat
 ### Docker MCP Gateway
 Docker has an [MCP Gateway](https://github.com/docker/mcp-gateway/blob/main/docs/mcp-gateway.md) you can run on your host and then connect Codex or Claude to it as an MCP server. What's nice about this is you can run a single instance of the gateway and have multiple containers connect to it as MCP servers without needing to run separate MCP servers in each container.
 
-#### Configure MCP Gateway Compose in .cludex
+#### Configure MCP Gateway Compose in .claudex
 In `~/.claudex/compose/mcp-gateway.yml`, add the following:
 
 ```yaml
