@@ -193,12 +193,29 @@ The server also exposes REST endpoints for `/health`, `/auth/start`, `/auth/stat
 ### Docker MCP Gateway
 Docker has an [MCP Gateway](https://github.com/docker/mcp-gateway/blob/main/docs/mcp-gateway.md) you can run on your host and then connect Codex or Claude to it as an MCP server. What's nice about this is you can run a single instance of the gateway and have multiple containers connect to it as MCP servers without needing to run separate MCP servers in each container.
 
-A current limitation is the MCP Gateway will generate a new API key each time it starts up, so you'll need to update your clients with the new key each time. Hopefully this is addressed in the future.
+#### Configure MCP Gateway Compose in .claudex
+In `~/.claudex/mcp-gateway.yml`, add the following:
+
+```yaml
+services:
+  mcp-gateway:
+    image: docker/mcp-gateway:dind
+    container_name: claudex-mcp-gateway
+    privileged: true
+    ports:
+      - "3000:3000"
+    command:
+      - --port=3000
+      - --transport=http
+      - --servers=fetch,playwright
+      - --memory=512Mb
+```
 
 #### Run the Gateway
+You can run this on your host and you can configure the port to whatever makes sense for your setup.
 
 ```bash
-docker mcp gateway run --port 8080 --transport streaming --verbose --log-calls --watch
+docker compose -f ~/.claudex/mcp-gateway.yml up -d
 ```
 
 ### Configure Codex
@@ -207,8 +224,7 @@ In `~/.codex/config.toml`, add the following:
 ```toml
 [mcp_servers.docker_gateway]
 transport = "http"
-url = "http://host.docker.internal:8080/mcp"
-http_headers = { Authorization = "Bearer <TOKEN>" }
+url = "http://host.docker.internal:3000/mcp"
 ```
 
 #### Configure Claude
@@ -218,10 +234,7 @@ In `~/.claude.json`, add the following:
 "mcpServers": {
   "DockerMCPGateway": {
     "type": "http",
-    "url": "http://host.docker.internal:8080/mcp",
-    "headers": {
-      "Authorization": "Bearer <TOKEN>"
-    }
+    "url": "http://host.docker.internal:3000/mcp"
   }
 }
 ```
