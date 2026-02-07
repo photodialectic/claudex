@@ -105,7 +105,7 @@ RUN sh -c "$(wget -O- https://github.com/deluan/zsh-in-docker/releases/download/
 # Install CLI toolchain; build arg lets update builds bust cache for this layer
 ARG CLAUDEX_BUILD_VERSION=0
 RUN echo "Installing CLI tools (build version: ${CLAUDEX_BUILD_VERSION})" \
-  && npm install -g @anthropic-ai/claude-code \
+  && curl -fsSL https://claude.ai/install.sh | bash \
   && npm install -g @openai/codex \
   && npm install -g @google/gemini-cli \
   && npm install -g @github/copilot
