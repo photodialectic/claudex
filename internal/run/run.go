@@ -112,6 +112,12 @@ func (o Options) BuildRunArgs() ([]string, error) {
 	if fi, err := os.Stat(claudexDir); err == nil && fi.IsDir() {
 		args = append(args, "-v", fmt.Sprintf("%s:/home/node/.claudex", claudexDir))
 	}
+
+	opencodeDir := filepath.Join(home, ".config/opencode")
+	if fi, err := os.Stat(opencodeDir); err == nil && fi.IsDir() {
+		args = append(args, "-v", fmt.Sprintf("%s:/home/node/.config/opencode", opencodeDir))
+	}
+
 	// workspace mounts
 	for _, abs := range o.Normalized {
 		base := filepath.Base(abs)
