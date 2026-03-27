@@ -1,5 +1,5 @@
 # Claudex
-![claudex logo](https://local.nickhedberg.com/images/KYaUOjdrSS50mdZacbwDHgjJ9gE=/fit-in/1200x1200/nhdc.nyc3.cdn.digitaloceanspaces.com/img%2F545%3A1000%2Fc256ce85459b69da49ba801fd116a9170129f09c.png)
+![claudex logo](https://github.com/user-attachments/assets/e6be63bc-7fbe-4fd7-ab6f-b0a1b11d0e5c)
 Claudex is a Docker-based environment for agentic AI systems (Anthropic Claude Code and OpenAI Codex), with strict firewall isolation and Git-based workspace tracking.
 
 ## Installation
