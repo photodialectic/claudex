@@ -1,5 +1,5 @@
 # Claudex
-![claudex logo](https://www.nickhedberg.com/images/vD-aaHs4dzNr78KxDN4JFG8PLi8=/fit-in/1024x0/https://s3-us-west-2.amazonaws.com/nick-hedberg/img%2F545%3A1000%2Fc256ce85459b69da49ba801fd116a9170129f09c.png)
+![claudex logo](https://local.nickhedberg.com/images/KYaUOjdrSS50mdZacbwDHgjJ9gE=/fit-in/1200x1200/nhdc.nyc3.cdn.digitaloceanspaces.com/img%2F545%3A1000%2Fc256ce85459b69da49ba801fd116a9170129f09c.png)
 Claudex is a Docker-based environment for agentic AI systems (Anthropic Claude Code and OpenAI Codex), with strict firewall isolation and Git-based workspace tracking.
 
 ## Installation
@@ -488,4 +488,21 @@ curl http://model-runner.docker.internal/engines/v1/chat/completions \
 }'
 
 {"choices":[{"finish_reason":"stop","index":0,"message":{"role":"assistant","content":"Hello, I'm here to help you with your language learning needs. What would you like to talk about? Do you have a specific question or topic in mind?"}}],"created":1752462477,"model":"ai/smollm2:360M-Q4_K_M","system_fingerprint":"b1-9c98bab","object":"chat.completion","usage":{"completion_tokens":34,"prompt_tokens":21,"total_tokens":55},"id":"chatcmpl-ADlVE5WjDfEgqAAhH2ukxs9aP0ETIcdF","timings":{"prompt_n":21,"prompt_ms":47.946,"prompt_per_token_ms":2.283142857142857,"prompt_per_second":437.9927418345639,"predicted_n":34,"predicted_ms":296.108,"predicted_per_token_ms":8.709058823529412,"predicted_per_second":114.82296999743338}}
+```
+
+### OpenCode
+[OpenCode](https://opencode.ai/docs/) is an open source AI coding agent. OpenCode is opt-in on claudex so you'll need your host to have the configuration and storeage directories set up for it.
+
+#### Configuration
+
+```
+mkdir -p ~/.config/opencode
+```
+
+create config [https://opencode.ai/docs/config/](https://opencode.ai/docs/config/) json in `~/.config/opencode/opencode.json` with the following content:
+
+#### Storage
+
+```
+mkdir -p ~/.local/share/opencode
 ```
