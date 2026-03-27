@@ -108,7 +108,8 @@ RUN echo "Installing CLI tools (build version: ${CLAUDEX_BUILD_VERSION})" \
   && curl -fsSL https://claude.ai/install.sh | bash \
   && npm install -g @openai/codex \
   && npm install -g @google/gemini-cli \
-  && npm install -g @github/copilot
+  && npm install -g @github/copilot \
+  && npm install -g opencode-ai
 
 COPY CLAUDEX.md /workspace/CLAUDE.md
 COPY CLAUDEX.md /workspace/AGENTS.md
