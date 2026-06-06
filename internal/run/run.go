@@ -85,10 +85,22 @@ func (o *Options) Derive() error {
 // BuildRunArgs builds docker run args array based on options and env.
 func (o Options) BuildRunArgs() ([]string, error) {
 	var args []string
-	args = append(args, "run", "--name", o.Name, "-d", "-e", "OPENAI_API_KEY", "-e", "AI_API_MK", "-e", "GEMINI_API_KEY", "--cap-add", "NET_ADMIN", "--cap-add", "NET_RAW")
+	args = append(args, "run", "--name", o.Name, "-d")
+
+	var envs []string
+	envs = append(envs, "OPENAI_API_KEY", "AI_API_MK", "GEMINI_API_KEY", "GITHUB_MCP_PAT", "DO_MODEL_ACCESS_KEY")
+	for _, e := range envs {
+		if os.Getenv(e) != "" {
+			args = append(args, "-e", e)
+		}
+	}
+
+	args = append(args, "--cap-add", "NET_ADMIN", "--cap-add", "NET_RAW")
+
 	if o.UseHostNetwork {
 		args = append(args, "--network", "host")
 	}
+
 	// docker sock mount if present
 	if _, err := os.Stat("/var/run/docker.sock"); err == nil {
 		args = append(args, "-v", "/var/run/docker.sock:/var/run/docker.sock")
