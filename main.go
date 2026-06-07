@@ -4,7 +4,7 @@ import (
 	"log"
 	"os"
 
-	"claudex/internal/cli"
+	"github.com/photodialectic/claudex/internal/cli"
 )
 
 // Thin wrapper to preserve legacy package while new builds target cmd/claudex.

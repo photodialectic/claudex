@@ -4,7 +4,7 @@ import (
 	"log"
 	"os"
 
-	"claudex/internal/cli"
+	"github.com/photodialectic/claudex/internal/cli"
 )
 
 func main() {

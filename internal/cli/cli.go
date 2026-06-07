@@ -5,10 +5,10 @@ import (
 	"os"
 	"path/filepath"
 
-	"claudex/internal/commands"
-	"claudex/internal/dockerx"
-	"claudex/internal/run"
-	"claudex/internal/version"
+	"github.com/photodialectic/claudex/internal/commands"
+	"github.com/photodialectic/claudex/internal/dockerx"
+	"github.com/photodialectic/claudex/internal/run"
+	"github.com/photodialectic/claudex/internal/version"
 )
 
 // Execute is the primary CLI dispatcher used by cmd/claudex and the

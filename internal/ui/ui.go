@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"claudex/internal/dockerx"
+	"github.com/photodialectic/claudex/internal/dockerx"
 )
 
 func StdinIsTTY() bool {

@@ -8,11 +8,11 @@ import (
 	"path/filepath"
 	"time"
 
-	"claudex/internal/buildctx"
-	"claudex/internal/containers"
-	"claudex/internal/dockerx"
-	"claudex/internal/version"
-	"claudex/internal/workspace"
+	"github.com/photodialectic/claudex/internal/buildctx"
+	"github.com/photodialectic/claudex/internal/containers"
+	"github.com/photodialectic/claudex/internal/dockerx"
+	"github.com/photodialectic/claudex/internal/version"
+	"github.com/photodialectic/claudex/internal/workspace"
 )
 
 type Options struct {
