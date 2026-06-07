@@ -10,10 +10,10 @@ import (
 	"strings"
 	"time"
 
-	"claudex/internal/buildctx"
-	"claudex/internal/containers"
-	"claudex/internal/dockerx"
-	"claudex/internal/ui"
+	"github.com/photodialectic/claudex/internal/buildctx"
+	"github.com/photodialectic/claudex/internal/containers"
+	"github.com/photodialectic/claudex/internal/dockerx"
+	"github.com/photodialectic/claudex/internal/ui"
 )
 
 const cliRefreshArg = "CLAUDEX_REFRESH_TOKEN"

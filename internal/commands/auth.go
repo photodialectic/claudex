@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
-	"claudex/internal/containers"
-	"claudex/internal/dockerx"
+	"github.com/photodialectic/claudex/internal/containers"
+	"github.com/photodialectic/claudex/internal/dockerx"
 )
 
 const googleDocsAuthPort = "8810"

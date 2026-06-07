@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"sort"
 
-	"claudex/internal/dockerx"
+	"github.com/photodialectic/claudex/internal/dockerx"
 )
 
 // Exists returns whether a container exists, whether it's running, and basic info.
