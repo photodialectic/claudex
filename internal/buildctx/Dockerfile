@@ -41,7 +41,8 @@ RUN apt update && apt install -y less \
   ripgrep \
   fd-find \
   socat \
-  tree
+  tree \
+  tmux
 
 # Ensure default node user has access to /usr/local/share
 RUN mkdir -p /usr/local/share/npm-global && \
@@ -114,6 +115,7 @@ RUN echo "Installing CLI tools (build version: ${CLAUDEX_BUILD_VERSION})" \
 COPY CLAUDEX.md /workspace/CLAUDE.md
 COPY CLAUDEX.md /workspace/AGENTS.md
 COPY CLAUDEX.md /workspace/GEMINI.md
+COPY .tmux.conf /home/node/.tmux.conf
 
 # Copy and set up firewall script
 COPY init-firewall.sh /usr/local/bin/
