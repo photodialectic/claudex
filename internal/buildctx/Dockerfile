@@ -42,7 +42,8 @@ RUN apt update && apt install -y less \
   fd-find \
   socat \
   tree \
-  tmux
+  tmux \
+  locales
 
 # Ensure default node user has access to /usr/local/share
 RUN mkdir -p /usr/local/share/npm-global && \
@@ -58,10 +59,18 @@ RUN SNIPPET="export PROMPT_COMMAND='history -a' && export HISTFILE=/commandhisto
 
 # Set `DEVCONTAINER` environment variable to help with orientation
 ENV DEVCONTAINER=true
+ENV TERM=tmux-256color
+ENV COLORTERM=truecolor
+ENV LANG=en_US.UTF-8
+ENV LC_ALL=en_US.UTF-8
 
 # Create workspace, context, config, and instructions directories and set permissions
 RUN mkdir -p /workspace /context /home/node/.claude /home/node/.codex /home/node/.copilot /home/node/.gemini /home/node/.claudex /home/node/instructions && \
   chown -R node:node /workspace /context /home/node/.claude /home/node/.codex /home/node/.copilot /home/node/.gemini /home/node/.claudex /home/node/instructions
+
+# Generate UTF-8 locale (fixes unicode/box drawing in TUIs)
+RUN sed -i 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen && \
+    locale-gen
 
 WORKDIR /workspace
 
@@ -102,6 +111,17 @@ RUN sh -c "$(wget -O- https://github.com/deluan/zsh-in-docker/releases/download/
   -a "source /usr/share/doc/fzf/examples/completion.zsh" \
   -a "export PROMPT_COMMAND='history -a' && export HISTFILE=/commandhistory/.bash_history" \
   -x
+
+# Prepend a tmux-aware guard to .zshrc to disable p10k inside tmux
+RUN sed -i 's|\[\[ -f ~/.p10k.zsh \]\] && source ~/.p10k.zsh|# p10k disabled here (handled below)|' /home/node/.zshrc && \
+    printf '%s\n' \
+  '# --- tmux simple prompt guard (must be at top) ---' \
+  'if [[ -n "$TMUX" ]]; then' \
+  '  PROMPT="%F{blue}%n@%m%f %F{cyan}%~%f %# "' \
+  '  RPROMPT=""' \
+  '  return 0' \
+  'fi' \
+  '' | cat - /home/node/.zshrc > /home/node/.zshrc.tmp && mv /home/node/.zshrc.tmp /home/node/.zshrc
 
 # Install CLI toolchain; build arg lets update builds bust cache for this layer
 ARG CLAUDEX_BUILD_VERSION=0
