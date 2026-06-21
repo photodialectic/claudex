@@ -43,6 +43,7 @@ RUN apt update && apt install -y less \
   socat \
   tree \
   tmux \
+  vim \
   locales
 
 # Ensure default node user has access to /usr/local/share
@@ -136,6 +137,7 @@ COPY CLAUDEX.md /workspace/CLAUDE.md
 COPY CLAUDEX.md /workspace/AGENTS.md
 COPY CLAUDEX.md /workspace/GEMINI.md
 COPY .tmux.conf /home/node/.tmux.conf
+COPY .vimrc /home/node/.vimrc
 
 # Copy and set up firewall script
 COPY init-firewall.sh /usr/local/bin/

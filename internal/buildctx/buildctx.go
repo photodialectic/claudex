@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 )
 
-//go:embed Dockerfile init-firewall.sh CLAUDEX.md .tmux.conf google-docs-mcp/**
+//go:embed Dockerfile init-firewall.sh CLAUDEX.md .tmux.conf .vimrc google-docs-mcp/**
 var dockerContextFS embed.FS
 
 // PrepareBuildContext writes embedded files to a temp directory and returns its path
@@ -18,7 +18,7 @@ func PrepareBuildContext() (string, func() error, error) {
 	if err != nil {
 		return "", nil, fmt.Errorf("cannot create temp build dir: %w", err)
 	}
-	files := []string{"Dockerfile", "init-firewall.sh", "CLAUDEX.md", ".tmux.conf"}
+	files := []string{"Dockerfile", "init-firewall.sh", "CLAUDEX.md", ".tmux.conf", ".vimrc"}
 	for _, name := range files {
 		data, err := dockerContextFS.ReadFile(name)
 		if err != nil {
