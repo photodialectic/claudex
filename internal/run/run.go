@@ -88,7 +88,7 @@ func (o Options) BuildRunArgs() ([]string, error) {
 	args = append(args, "run", "--name", o.Name, "-d")
 
 	var envs []string
-	envs = append(envs, "OPENAI_API_KEY", "AI_API_MK", "GEMINI_API_KEY", "GITHUB_MCP_PAT", "DO_MODEL_ACCESS_KEY")
+	envs = append(envs, "OPENAI_API_KEY", "AI_API_MK", "GEMINI_API_KEY", "GITHUB_MCP_PAT", "DO_MODEL_ACCESS_KEY", "AI_AGENT_MK")
 	for _, e := range envs {
 		if os.Getenv(e) != "" {
 			args = append(args, "-e", e)
