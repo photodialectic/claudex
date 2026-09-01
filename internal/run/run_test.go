@@ -14,7 +14,7 @@ func TestParseArgsAndDerive(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
-	if !o.UseHostNetwork || !o.StrictMounts || !o.ForceReplace || !o.AlwaysParallel || !o.SkipGit {
+	if o.Network != "host" || !o.StrictMounts || !o.ForceReplace || !o.AlwaysParallel || !o.SkipGit {
 		t.Fatalf("flags not parsed correctly: %+v", o)
 	}
 	if len(o.Workdirs) != 1 {
