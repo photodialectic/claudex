@@ -146,6 +146,7 @@ RUN chmod +x /usr/local/bin/init-firewall.sh && \
     printf '%s\n' \
       'node ALL=(ALL) NOPASSWD: /usr/bin/docker' \
       'node ALL=(root) NOPASSWD: /usr/local/bin/init-firewall.sh' \
+      'node ALL=(root) NOPASSWD: /usr/sbin/update-ca-certificates' \
       > /etc/sudoers.d/node-firewall && \
     chmod 0440 /etc/sudoers.d/node-firewall
 USER node

@@ -65,10 +65,12 @@ claudex [OPTIONS] [DIR1 DIR2 ...]
 
 **Options:**
 - `--host-network` - Use host networking (allows OAuth callbacks)
+- `--network <NAME>` - Attach to a specific Docker network (e.g. `mono_default`)
 - `--name <NAME>` - Override derived container name
 - `--parallel` - Always create new container (suffix with timestamp)
 - `--replace` - Replace target container if it exists
 - `--strict-mounts` - Error if existing container mounts differ
+- `--ca-cert <PATH>` - Mount a custom CA certificate and trust it inside the container
 
 **Behavior:**
 - Mounts each `DIR` at `/workspace/<basename(DIR)>` inside container
@@ -84,6 +86,48 @@ claudex service1/ service2/          # Mount multiple directories
 claudex --host-network app/          # Enable host networking
 claudex --name myproject app/        # Custom container name
 claudex --parallel --replace app/    # Force new container
+```
+
+### Custom Docker Networks
+
+By default the container uses Docker's default bridge network. To attach it to a
+specific network (for example, a `docker compose` project's network so it can
+reach sibling services), pass `--network <NAME>`:
+
+```bash
+claudex --network mono_default app/
+```
+
+This is the flexible alternative to `--host-network`, which is equivalent to
+`--network host`. Both flags set the same underlying `--network` option, so only
+one applies (the last one wins).
+
+### Custom CA Certificates
+
+To trust a self-signed or private CA certificate inside the container (for
+example, when a local service terminates TLS with a cert your toolchain doesn't
+trust yet), pass `--ca-cert <PATH>`:
+
+```bash
+claudex --ca-cert ~/.claudex/certs/local.nickhedberg.com.crt --replace app/
+```
+
+The cert is mounted into the container and installed as a trusted root via
+`update-ca-certificates`, so `curl`, `git`, Node.js, and Python trust it. Notes:
+
+- The cert is installed only at container **creation**. Pass `--replace` (or point
+  at a new container) when you add or change a certificate.
+- The certificate must contain a Subject Alternative Name (SAN) matching the
+  hostname you connect to, otherwise TLS verification still fails on the name.
+- Cert trust is independent of the firewall. If you launch with `--firewall`,
+  outbound connections to the CA'd host are still dropped unless you also allow
+  it (e.g. `EXTRA_ALLOWED_DOMAINS`) or use `--host-network` / `--network`.
+
+To extract a self-signed cert straight from a running server:
+
+```bash
+openssl s_client -connect local.nickhedberg.com:443 -showcerts </dev/null 2>/dev/null \
+  | openssl x509 -outform PEM > ~/.claudex/certs/local.nickhedberg.com.crt
 ```
 
 ### Container Management

@@ -48,13 +48,14 @@ func Execute(args []string) error {
 
 func usage() error {
 	prog := filepath.Base(os.Args[0])
-	fmt.Printf(`Usage: %s [--host-network] [--name <NAME>] [--parallel] [--replace] [--strict-mounts] [DIR1 DIR2 ...]
+	fmt.Printf(`Usage: %s [--host-network | --network <NAME>] [--name <NAME>] [--parallel] [--replace] [--strict-mounts] [DIR1 DIR2 ...]
 
 Mounts each DIRi at /workspace/<basename(DIRi)> in the claudex container.
 If no DIR is provided, mounts each file and directory in the current directory at /workspace/<name>.
 
 Options:
   --host-network    Use host networking (allows OAuth callbacks)
+  --network <NAME>  Attach to a specific Docker network (e.g. mono_default)
   --name <NAME>     Override derived container name
   --parallel        Always create a new container (suffix with timestamp)
   --replace         Replace the target container if it exists

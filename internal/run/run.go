@@ -16,13 +16,14 @@ import (
 )
 
 type Options struct {
-	UseHostNetwork bool
+	Network        string
 	NameOverride   string
 	ForceReplace   bool
 	AlwaysParallel bool
 	StrictMounts   bool
 	SkipGit        bool
 	Firewall       bool
+	CACertFile     string
 	Workdirs       []string
 
 	// Derived
@@ -38,7 +39,13 @@ func ParseArgs(args []string) (Options, error) {
 		a := args[i]
 		switch a {
 		case "--host-network":
-			o.UseHostNetwork = true
+			o.Network = "host"
+		case "--network":
+			if i+1 >= len(args) {
+				return o, fmt.Errorf("--network requires a value")
+			}
+			o.Network = args[i+1]
+			i++
 		case "--no-git":
 			o.SkipGit = true
 		case "--firewall":
@@ -55,6 +62,12 @@ func ParseArgs(args []string) (Options, error) {
 			o.AlwaysParallel = true
 		case "--strict-mounts":
 			o.StrictMounts = true
+		case "--ca-cert":
+			if i+1 >= len(args) {
+				return o, fmt.Errorf("--ca-cert requires a path")
+			}
+			o.CACertFile = args[i+1]
+			i++
 		default:
 			o.Workdirs = append(o.Workdirs, a)
 		}
@@ -97,8 +110,8 @@ func (o Options) BuildRunArgs() ([]string, error) {
 
 	args = append(args, "--cap-add", "NET_ADMIN", "--cap-add", "NET_RAW")
 
-	if o.UseHostNetwork {
-		args = append(args, "--network", "host")
+	if o.Network != "" {
+		args = append(args, "--network", o.Network)
 	}
 
 	// docker sock mount if present
@@ -123,6 +136,17 @@ func (o Options) BuildRunArgs() ([]string, error) {
 	claudexDir := filepath.Join(home, ".claudex")
 	if fi, err := os.Stat(claudexDir); err == nil && fi.IsDir() {
 		args = append(args, "-v", fmt.Sprintf("%s:/home/node/.claudex", claudexDir))
+	}
+
+	if o.CACertFile != "" {
+		abs, err := filepath.Abs(o.CACertFile)
+		if err != nil {
+			return nil, err
+		}
+		if fi, err := os.Stat(abs); err != nil || fi.IsDir() {
+			return nil, fmt.Errorf("--ca-cert: %s is not a readable file", o.CACertFile)
+		}
+		args = append(args, "-v", fmt.Sprintf("%s:/usr/local/share/ca-certificates/claudex-custom.crt:ro", abs))
 	}
 
 	// OpenCode Config mount (if exists)
@@ -206,6 +230,7 @@ func Run(args []string, in io.Reader, out, errOut io.Writer, dx dockerx.Docker) 
 		if exists {
 			maybeInitGit(o.SkipGit, dx, o.Name, out, errOut)
 			maybeInitFirewall(o.Firewall, dx, o.Name, out, errOut)
+			maybeInstallCA(o.CACertFile, dx, o.Name, out, errOut)
 			fmt.Fprintln(out, "Attaching shell. Type 'exit' to leave.")
 			return dx.ExecInteractive(o.Name, []string{"bash"}, in, out, errOut)
 		}
@@ -241,6 +266,7 @@ func createAndAttach(o Options, in io.Reader, out, errOut io.Writer, dx dockerx.
 	}
 	maybeInitGit(o.SkipGit, dx, o.Name, out, errOut)
 	maybeInitFirewall(o.Firewall, dx, o.Name, out, errOut)
+	maybeInstallCA(o.CACertFile, dx, o.Name, out, errOut)
 	fmt.Fprintln(out, "Attaching shell. Type 'exit' to leave.")
 	return dx.ExecInteractive(o.Name, []string{"bash"}, in, out, errOut)
 }
@@ -265,6 +291,16 @@ func maybeInitGit(skip bool, dx dockerx.Docker, name string, out, errOut io.Writ
 		return
 	}
 	fmt.Fprintln(out, "Initialized Git repository in /workspace and staged current contents")
+}
+
+func maybeInstallCA(caFile string, dx dockerx.Docker, name string, out, errOut io.Writer) {
+	if caFile == "" {
+		return
+	}
+	fmt.Fprintln(out, "Installing custom CA certificate...")
+	if err := dx.Exec(name, "bash", "-c", "sudo update-ca-certificates"); err != nil {
+		fmt.Fprintf(errOut, "Warning: update-ca-certificates failed: %v\n", err)
+	}
 }
 
 func maybeInitFirewall(enable bool, dx dockerx.Docker, name string, out, errOut io.Writer) {
