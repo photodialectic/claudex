@@ -189,6 +189,49 @@ claudex harness update [<name> ...]  # Rebuild one or all tool image layers
 - Google Docs OAuth tokens persist in the `claudex-claudex` volume; run
   `claudex harness pull claudex` to back them up to your host.
 
+### Adding a Harness
+
+Harness definitions live in `internal/harness/harnesses.yaml` (embedded into
+the binary at build time). To add support for a new agent, add an entry:
+
+```yaml
+  - name: example
+    env_vars:
+      - EXAMPLE_API_KEY
+    install:
+      - npm install -g example-agent
+    mounts:
+      - host_rel: .example
+        container: /home/node/.example
+        volume: claudex-example
+        kind: dir
+```
+
+Fields:
+
+- `name` — unique harness key, also used for `claudex harness push <name>`.
+- `env_vars` — environment variables forwarded from the host into the session.
+- `install` — one or more shell commands; each becomes its own generated `RUN`
+  layer in the image and can be refreshed independently with
+  `claudex harness update <name>`.
+- `mounts` — config paths shared between host and container via a named volume:
+  - `host_rel` — host path relative to `~`.
+  - `container` — absolute path inside the container.
+  - `volume` — named volume backing the config (a new one per harness is fine).
+  - `volume_path` — only for single-file mounts; omit for directories.
+  - `kind` — `dir` or `file`.
+
+If a harness needs custom merge behavior on `claudex harness push` (like
+claude's `.claude.json`, which overlays `mcpServers`/`permissions`/etc. without
+clobbering `projects`), add a `MergeFunc` to `internal/harness/harness.go` and
+register it in the `mergeFuncs` map keyed by the harness name.
+
+After adding a harness, rebuild the image so the new install layer is rendered:
+
+```bash
+claudex harness update <name>
+```
+
 ### Spec-Driven Development Workflow
 
 Claudex supports spec-driven development by allowing you to share specifications with running containers:

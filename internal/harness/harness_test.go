@@ -6,23 +6,24 @@ import (
 	"testing"
 )
 
-func TestRegistryContainsExpectedHarnesses(t *testing.T) {
-	want := map[string]bool{
-		"claude":   true,
-		"codex":    true,
-		"copilot":  true,
-		"gemini":   true,
-		"opencode": true,
-		"claudex":  true,
-	}
+func TestRegistryNamesUnique(t *testing.T) {
+	seen := map[string]bool{}
 	for _, h := range Registry() {
-		if !want[h.Name] {
-			t.Fatalf("unexpected harness %q", h.Name)
+		if h.Name == "" {
+			t.Fatalf("harness with empty name at index of %d harnesses", len(Registry()))
 		}
-		delete(want, h.Name)
+		if seen[h.Name] {
+			t.Fatalf("duplicate harness name %q", h.Name)
+		}
+		seen[h.Name] = true
 	}
-	if len(want) != 0 {
-		t.Fatalf("missing harnesses: %v", want)
+}
+
+func TestRegistryCoreHarnessesPresent(t *testing.T) {
+	for _, name := range []string{"claude", "codex", "copilot", "gemini", "opencode", "claudex"} {
+		if _, ok := ByName(name); !ok {
+			t.Fatalf("expected core harness %q to be present", name)
+		}
 	}
 }
 

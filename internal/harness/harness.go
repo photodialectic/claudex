@@ -1,13 +1,19 @@
 package harness
 
 import (
+	"embed"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"gopkg.in/yaml.v3"
 )
+
+//go:embed harnesses.yaml
+var harnessDefsFS embed.FS
 
 // Kind distinguishes directory mounts from single-file mounts.
 type Kind int
@@ -152,130 +158,67 @@ func MergeClaudeJSON(dst, src []byte) ([]byte, error) {
 	return json.MarshalIndent(dstMap, "", "  ")
 }
 
-var registry = []Harness{
-	{
-		Name: "claude",
-		EnvVars: []string{
-			"ANTHROPIC_API_KEY",
-			"GITHUB_MCP_PAT",
-		},
-		Mounts: []Mount{
-			{
-				HostRel:    ".claude.json",
-				Container:  "/home/node/.claude-state",
-				Volume:     "claudex-claude-json",
-				VolumePath: "claude.json",
-				Kind:       KindFile,
-			},
-			{
-				HostRel:   ".claude",
-				Container: "/home/node/.claude",
-				Volume:    "claudex-claude",
-				Kind:      KindDir,
-			},
-		},
-		Merge: MergeClaudeJSON,
-		Install: []string{
-			"curl -fsSL https://claude.ai/install.sh | bash",
-		},
-	},
-	{
-		Name: "codex",
-		EnvVars: []string{
-			"OPENAI_API_KEY",
-			"AI_API_MK",
-		},
-		Install: []string{
-			"npm install -g @openai/codex",
-		},
-		Mounts: []Mount{
-			{
-				HostRel:   ".codex",
-				Container: "/home/node/.codex",
-				Volume:    "claudex-codex",
-				Kind:      KindDir,
-			},
-		},
-	},
-	{
-		Name: "copilot",
-		Install: []string{
-			"npm install -g @github/copilot",
-		},
-		Mounts: []Mount{
-			{
-				HostRel:   ".copilot",
-				Container: "/home/node/.copilot",
-				Volume:    "claudex-copilot",
-				Kind:      KindDir,
-			},
-		},
-	},
-	{
-		Name: "gemini",
-		EnvVars: []string{
-			"GEMINI_API_KEY",
-		},
-		Install: []string{
-			"npm install -g @google/gemini-cli",
-		},
-		Mounts: []Mount{
-			{
-				HostRel:   ".gemini",
-				Container: "/home/node/.gemini",
-				Volume:    "claudex-gemini",
-				Kind:      KindDir,
-			},
-		},
-	},
-	{
-		Name: "opencode",
-		EnvVars: []string{
-			"DO_MODEL_ACCESS_KEY",
-			"AI_AGENT_MK",
-		},
-		Install: []string{
-			"npm install -g opencode-ai",
-		},
-		Mounts: []Mount{
-			{
-				HostRel:   ".config/opencode",
-				Container: "/home/node/.config/opencode",
-				Volume:    "claudex-opencode-config",
-				Kind:      KindDir,
-			},
-			{
-				HostRel:   ".local/share/opencode",
-				Container: "/home/node/.local/share/opencode",
-				Volume:    "claudex-opencode-store",
-				Kind:      KindDir,
-			},
-		},
-	},
-	{
-		Name:    "pi",
-		EnvVars: []string{},
-		Install: []string{
-			"npm install -g --ignore-scripts @earendil-works/pi-coding-agent",
-		},
-		Mounts: []Mount{
-			{
-				HostRel:   ".pi",
-				Container: "/home/node/.pi",
-				Volume:    "claudex-pi",
-				Kind:      KindDir,
-			},
-		},
-	},
-	{
-		Name: "claudex",
-		Mounts: []Mount{
-			{
-				HostRel:   ".claudex",
-				Container: "/home/node/.claudex",
-				Volume:    "claudex-claudex",
-				Kind:      KindDir,
-			},
-		},
-	},
+// harnessesFile mirrors the YAML schema in harnesses.yaml. Merge is not part of
+// the schema; harness-specific merge logic lives in Go and is wired up by name.
+type harnessesFile struct {
+	Harnesses []harnessSpec `yaml:"harnesses"`
+}
+
+type harnessSpec struct {
+	Name    string      `yaml:"name"`
+	EnvVars []string    `yaml:"env_vars"`
+	Install []string    `yaml:"install"`
+	Mounts  []mountSpec `yaml:"mounts"`
+}
+
+type mountSpec struct {
+	HostRel    string `yaml:"host_rel"`
+	Container  string `yaml:"container"`
+	Volume     string `yaml:"volume"`
+	VolumePath string `yaml:"volume_path"`
+	Kind       string `yaml:"kind"`
+}
+
+// mergeFuncs maps harness name -> merge logic that cannot be expressed in YAML.
+var mergeFuncs = map[string]MergeFunc{
+	"claude": MergeClaudeJSON,
+}
+
+// registry holds all supported harnesses in declaration order.
+var registry = loadRegistry()
+
+func loadRegistry() []Harness {
+	data, err := harnessDefsFS.ReadFile("harnesses.yaml")
+	if err != nil {
+		panic(fmt.Sprintf("read embedded harnesses.yaml: %v", err))
+	}
+	var file harnessesFile
+	if err := yaml.Unmarshal(data, &file); err != nil {
+		panic(fmt.Sprintf("parse harnesses.yaml: %v", err))
+	}
+
+	out := make([]Harness, 0, len(file.Harnesses))
+	for _, spec := range file.Harnesses {
+		h := Harness{
+			Name:    spec.Name,
+			EnvVars: spec.EnvVars,
+			Install: spec.Install,
+			Merge:   mergeFuncs[spec.Name],
+		}
+		for _, m := range spec.Mounts {
+			kind := KindDir
+			if m.Kind == "file" {
+				kind = KindFile
+			}
+			h.Mounts = append(h.Mounts, Mount{
+				HostRel:    m.HostRel,
+				Container:  m.Container,
+				Volume:     m.Volume,
+				VolumePath: m.VolumePath,
+				Kind:       kind,
+			})
+		}
+		out = append(out, h)
+	}
+	return out
 }
