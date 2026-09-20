@@ -30,10 +30,13 @@ type authStatusResponse struct {
 	TokenFile     string `json:"token_file"`
 }
 
-// Auth runs `claudex auth <service>` workflows.
+// Auth runs `claudex auth <service|callback>` workflows.
 func Auth(args []string) error {
 	if len(args) == 0 {
-		return errors.New("usage: claudex auth <service> [--container <name>]")
+		return errors.New("usage: claudex auth <service> [--container <name>] | claudex auth callback [--container <name>] <url>")
+	}
+	if args[0] == "callback" {
+		return AuthCallback(args[1:])
 	}
 
 	service := args[0]
@@ -124,6 +127,54 @@ func Auth(args []string) error {
 	return nil
 }
 
+// AuthCallback runs `claudex auth callback <url> [--container <NAME>]` to
+// replay an OAuth redirect URL inside a Claudex container. This is useful when
+// the auth flow has been driven manually (for example when Google redirected
+// the browser to http://localhost:PORT/callback?... on the host) and the
+// callback merely needs to be re-issued inside the container where the MCP
+// server listens.
+func AuthCallback(args []string) error {
+	var containerFlag string
+	var rest []string
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch a {
+		case "--container":
+			if i+1 >= len(args) {
+				return errors.New("--container requires a value")
+			}
+			containerFlag = args[i+1]
+			i++
+		default:
+			rest = append(rest, a)
+		}
+	}
+	if len(rest) == 0 {
+		return errors.New("usage: claudex auth callback [--container <NAME>] <callback-url>")
+	}
+	callback := rest[0]
+	if _, err := url.Parse(callback); err != nil {
+		return fmt.Errorf("invalid callback URL: %w", err)
+	}
+
+	dx := &dockerx.CLI{}
+	target, err := pickRunning(dx, containerFlag)
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("Replaying callback inside container %s...\n", target)
+	out, err := replayAndRead(dx, target, callback)
+	if err != nil {
+		return err
+	}
+	if len(out) > 0 {
+		fmt.Println(strings.TrimSpace(string(out)))
+	}
+	fmt.Printf("✅ Callback replayed in container %s.\n", target)
+	return nil
+}
+
 func restartServer(dx dockerx.Docker, container string) error {
 	_ = dx.Exec(container, "pkill", "-f", "google-docs-mcp")
 	cmd := fmt.Sprintf("nohup google-docs-mcp >/tmp/google-docs-mcp-auth.log 2>&1 &")
@@ -160,11 +211,16 @@ func requestAuthStart(dx dockerx.Docker, container string) (*authStartResponse, 
 }
 
 func replayCallback(dx dockerx.Docker, container, callback string) error {
-	_, err := dx.ExecOutput(container, []string{"curl", "-s", callback})
+	_, err := replayAndRead(dx, container, callback)
+	return err
+}
+
+func replayAndRead(dx dockerx.Docker, container, callback string) ([]byte, error) {
+	out, err := dx.ExecOutput(container, []string{"curl", "-s", callback})
 	if err != nil {
-		return fmt.Errorf("failed to replay callback: %w", err)
+		return nil, fmt.Errorf("failed to replay callback: %w", err)
 	}
-	return nil
+	return out, nil
 }
 
 func requestAuthStatus(dx dockerx.Docker, container string) (*authStatusResponse, error) {
