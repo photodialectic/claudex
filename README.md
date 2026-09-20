@@ -577,3 +577,26 @@ create config [https://opencode.ai/docs/config/](https://opencode.ai/docs/config
 ```
 mkdir -p ~/.local/share/opencode
 ```
+
+### pi
+[pi](https://pi.dev/) is an open source AI coding agent. pi is opt-in on claudex so you'll need your host to have the configuration and storeage directories set up for it.
+
+#### explore docker-model-runners with pi
+
+`~/.pi/agent/models.json`:
+
+```json
+{
+  "providers": {
+    "dmr": {
+      "baseUrl": "http://model-runner.docker.internal/engines/v1",
+      "api": "openai-completions",
+      "apiKey": "dmr",
+      "models": [
+        {"id": "deepseek-r1-distill-llama"}
+      ]
+    }
+  }
+}
+```
+
