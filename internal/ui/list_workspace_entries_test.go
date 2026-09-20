@@ -3,7 +3,7 @@ package ui
 import (
 	"testing"
 
-	"claudex/internal/dockerx"
+	"github.com/photodialectic/claudex/internal/dockerx"
 )
 
 func TestListWorkspaceEntriesFiltersAndSorts(t *testing.T) {

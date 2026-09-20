@@ -49,11 +49,14 @@ make rebuild-image  # Force rebuild image only
 
 ### Refresh CLI tools inside the image
 
-```bash
-claudex update
-```
+Each tool's install command is generated into the image from the harness
+registry, so a single tool's layer can be refreshed without rebuilding the rest:
 
-Add `--no-cache` if you want to force a full rebuild during the refresh.
+```bash
+claudex harness update                # Refresh all tool layers
+claudex harness update codex          # Refresh just the codex tool layer
+claudex harness update --no-cache     # Force a full rebuild
+```
 
 ## Usage
 
@@ -135,7 +138,7 @@ openssl s_client -connect local.nickhedberg.com:443 -showcerts </dev/null 2>/dev
 **Build/update image:**
 ```bash
 claudex build
-claudex update
+claudex harness update [<name> ...]
 ```
 
 **List containers:**
@@ -162,6 +165,29 @@ claudex destroy [OPTIONS]
 claudex push [--name <NAME>] <file_or_dir> [...]          # Copy to container
 claudex pull [--name <NAME>] <container_path> [dest_dir]  # Copy from container
 ```
+
+### Config volumes & harness sync
+
+Claudex keeps per-agent config in shared named volumes (not host bind mounts), so
+containers can't mutate your host dotfiles and multiple claudex sessions share
+the same session storage. Each "harness" (claude, codex, copilot, gemini,
+opencode) declares its config paths and any forwarded env vars in a single spot.
+
+On first use, claudex auto-seeds the volume for each harness from the matching
+host config. To sync host config changes into the live volume, or back up the
+volume to your host:
+
+```bash
+claudex harness list                 # Show harnesses and their paths/volumes
+claudex harness push [<name> ...]    # Host config -> volume (merge for .claude.json)
+claudex harness pull [<name> ...]    # Volume -> ~/.claudex/backups/<name>/<ts>/
+claudex harness update [<name> ...]  # Rebuild one or all tool image layers
+```
+
+- `.claude.json` is merged on push: host-owned keys (`mcpServers`, `permissions`,
+  `hooks`, etc.) are overlaid without clobbering `projects` session history.
+- Google Docs OAuth tokens persist in the `claudex-claudex` volume; run
+  `claudex harness pull claudex` to back them up to your host.
 
 ### Spec-Driven Development Workflow
 

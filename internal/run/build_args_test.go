@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"claudex/internal/version"
+	"github.com/photodialectic/claudex/internal/version"
 )
 
 func TestBuildRunArgsLabelsAndMounts(t *testing.T) {

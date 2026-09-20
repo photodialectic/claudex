@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"claudex/internal/dockerx"
+	"github.com/photodialectic/claudex/internal/dockerx"
 )
 
 func TestListFiltersByLabelAndStatus(t *testing.T) {

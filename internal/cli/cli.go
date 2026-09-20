@@ -26,8 +26,6 @@ func Execute(args []string) error {
 		return nil
 	case "build":
 		return commands.Build(args[1:])
-	case "update":
-		return commands.Update(args[1:])
 	case "push":
 		return commands.Push(args[1:])
 	case "pull":
@@ -38,6 +36,8 @@ func Execute(args []string) error {
 		return commands.Destroy(args[1:])
 	case "auth":
 		return commands.Auth(args[1:])
+	case "harness":
+		return commands.Harness(args[1:])
 	case "-h", "--help", "help":
 		return usage()
 	default:
@@ -73,8 +73,8 @@ Examples:
 Build the Docker image:
   %s build [--no-cache]
 
-Refresh CLI tools without rebuilding base layers:
-  %s update [--no-cache]
+Refresh one or more tool image layers:
+  %s harness update [--no-cache] [<NAME> ...]
 
 Push/pull files with a container:
   %s push [--name <NAME>] <file_or_dir> [...]
@@ -88,6 +88,11 @@ Destroy claudex containers:
 
 Guided Google Docs OAuth:
   %s auth google-docs-mcp [--container <NAME>]
-`, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog)
+
+Manage harness config volumes:
+  %s harness list
+  %s harness push [<NAME> ...]
+  %s harness pull [<NAME> ...]
+`, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog)
 	return nil
 }
