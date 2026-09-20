@@ -1,0 +1,81 @@
+harnesses:
+  - name: claude
+    env_vars:
+      - ANTHROPIC_API_KEY
+      - GITHUB_MCP_PAT
+    install:
+      - curl -fsSL https://claude.ai/install.sh | bash
+    mounts:
+      - host_rel: .claude.json
+        container: /home/node/.claude-state
+        volume: claudex-claude-json
+        volume_path: claude.json
+        kind: file
+      - host_rel: .claude
+        container: /home/node/.claude
+        volume: claudex-claude
+        kind: dir
+
+  - name: codex
+    env_vars:
+      - OPENAI_API_KEY
+      - AI_API_MK
+    install:
+      - npm install -g @openai/codex
+    mounts:
+      - host_rel: .codex
+        container: /home/node/.codex
+        volume: claudex-codex
+        kind: dir
+
+  - name: copilot
+    install:
+      - npm install -g @github/copilot
+    mounts:
+      - host_rel: .copilot
+        container: /home/node/.copilot
+        volume: claudex-copilot
+        kind: dir
+
+  - name: gemini
+    env_vars:
+      - GEMINI_API_KEY
+    install:
+      - npm install -g @google/gemini-cli
+    mounts:
+      - host_rel: .gemini
+        container: /home/node/.gemini
+        volume: claudex-gemini
+        kind: dir
+
+  - name: opencode
+    env_vars:
+      - DO_MODEL_ACCESS_KEY
+      - AI_AGENT_MK
+    install:
+      - npm install -g opencode-ai
+    mounts:
+      - host_rel: .config/opencode
+        container: /home/node/.config/opencode
+        volume: claudex-opencode-config
+        kind: dir
+      - host_rel: .local/share/opencode
+        container: /home/node/.local/share/opencode
+        volume: claudex-opencode-store
+        kind: dir
+
+  - name: pi
+    install:
+      - npm install -g --ignore-scripts @earendil-works/pi-coding-agent
+    mounts:
+      - host_rel: .pi
+        container: /home/node/.pi
+        volume: claudex-pi
+        kind: dir
+
+  - name: claudex
+    mounts:
+      - host_rel: .claudex
+        container: /home/node/.claudex
+        volume: claudex-claudex
+        kind: dir
