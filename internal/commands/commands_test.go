@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"claudex/internal/dockerx"
+	"github.com/photodialectic/claudex/internal/dockerx"
 )
 
 func TestPickRunning_ByNameAndStatus(t *testing.T) {
@@ -46,36 +46,78 @@ func TestPickRunning_AutoSelectionCases(t *testing.T) {
 	_ = errors.New // avoid unused import if assertions change
 }
 
-func TestUpdateWithDockerSetsRefreshToken(t *testing.T) {
+func TestResolveUpdateTargetsAll(t *testing.T) {
+	names, err := resolveUpdateTargets(nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !containsStr(names, "codex") || !containsStr(names, "opencode") || !containsStr(names, "claude") {
+		t.Fatalf("expected all tool harnesses, got %v", names)
+	}
+	if containsStr(names, "claudex") {
+		t.Fatalf("claudex (no install) should not be a target, got %v", names)
+	}
+}
+
+func TestResolveUpdateTargetsNamed(t *testing.T) {
+	names, err := resolveUpdateTargets([]string{"codex"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(names) != 1 || names[0] != "codex" {
+		t.Fatalf("expected [codex], got %v", names)
+	}
+}
+
+func TestResolveUpdateTargetsUnknown(t *testing.T) {
+	if _, err := resolveUpdateTargets([]string{"nope"}); err == nil || !strings.Contains(err.Error(), "unknown harness") {
+		t.Fatalf("expected unknown harness error, got %v", err)
+	}
+}
+
+func TestResolveUpdateTargetsNoInstall(t *testing.T) {
+	if _, err := resolveUpdateTargets([]string{"claudex"}); err == nil || !strings.Contains(err.Error(), "no install command") {
+		t.Fatalf("expected no install command error, got %v", err)
+	}
+}
+
+func TestHarnessUpdateSetsBuildArgs(t *testing.T) {
 	f := &dockerx.Fake{}
-	if err := updateWithDocker(f, nil); err != nil {
+	if err := harnessUpdateWithDocker(f, []string{"codex"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if f.BuildTag != "claudex" {
 		t.Fatalf("expected tag 'claudex', got %q", f.BuildTag)
 	}
-	token, ok := f.BuildOpts.BuildArgs[cliRefreshArg]
-	if !ok || token == "" {
-		t.Fatalf("expected refresh token, got map %+v", f.BuildOpts.BuildArgs)
+	if len(f.BuildOpts.BuildArgs) != 1 {
+		t.Fatalf("expected one build arg, got %+v", f.BuildOpts.BuildArgs)
+	}
+	if token := f.BuildOpts.BuildArgs["CLAUDEX_TOOL_codex"]; token == "" {
+		t.Fatalf("expected codex build arg token, got %+v", f.BuildOpts.BuildArgs)
 	}
 	if f.BuildOpts.NoCache {
-		t.Fatalf("expected NoCache to be false")
+		t.Fatalf("expected NoCache false")
 	}
 }
 
-func TestUpdateWithDockerNoCacheFlag(t *testing.T) {
+func TestHarnessUpdateNoCache(t *testing.T) {
 	f := &dockerx.Fake{}
-	if err := updateWithDocker(f, []string{"--no-cache"}); err != nil {
+	if err := harnessUpdateWithDocker(f, []string{"--no-cache"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if !f.BuildOpts.NoCache {
-		t.Fatalf("expected NoCache to be true")
+		t.Fatalf("expected NoCache true")
+	}
+	if len(f.BuildOpts.BuildArgs) == 0 {
+		t.Fatalf("expected build args for all tools")
 	}
 }
 
-func TestUpdateWithDockerUnknownFlag(t *testing.T) {
-	f := &dockerx.Fake{}
-	if err := updateWithDocker(f, []string{"--bogus"}); err == nil || !strings.Contains(err.Error(), "unknown arg") {
-		t.Fatalf("expected unknown arg error, got %v", err)
+func containsStr(a []string, s string) bool {
+	for _, x := range a {
+		if x == s {
+			return true
+		}
 	}
+	return false
 }

@@ -28,6 +28,19 @@ type Fake struct {
 		Name string
 		Tail int
 	}
+	VolumeCreateCalls     []string
+	VolumeCreateCreated   bool
+	VolumeCreateErr       error
+	CopyHostToVolumeCalls []struct {
+		HostPath   string
+		Volume     string
+		VolumePath string
+	}
+	CopyVolumeToHostCalls []struct {
+		Volume     string
+		VolumePath string
+		HostPath   string
+	}
 }
 
 func (f *Fake) Inspect(name string) (Container, error) {
@@ -79,6 +92,29 @@ func (f *Fake) Logs(name string, tail int) ([]byte, error) {
 		Tail int
 	}{Name: name, Tail: tail})
 	return f.LogsOut, f.LogsErr
+}
+
+func (f *Fake) VolumeCreate(name string) (bool, error) {
+	f.VolumeCreateCalls = append(f.VolumeCreateCalls, name)
+	return f.VolumeCreateCreated, f.VolumeCreateErr
+}
+
+func (f *Fake) CopyHostToVolume(hostPath, volume, volumePath string) error {
+	f.CopyHostToVolumeCalls = append(f.CopyHostToVolumeCalls, struct {
+		HostPath   string
+		Volume     string
+		VolumePath string
+	}{HostPath: hostPath, Volume: volume, VolumePath: volumePath})
+	return nil
+}
+
+func (f *Fake) CopyVolumeToHost(volume, volumePath, hostPath string) error {
+	f.CopyVolumeToHostCalls = append(f.CopyVolumeToHostCalls, struct {
+		Volume     string
+		VolumePath string
+		HostPath   string
+	}{Volume: volume, VolumePath: volumePath, HostPath: hostPath})
+	return nil
 }
 
 // ErrNotFound is a minimal error type to simulate missing container.

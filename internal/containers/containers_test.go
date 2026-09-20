@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"claudex/internal/dockerx"
+	"github.com/photodialectic/claudex/internal/dockerx"
 )
 
 func TestMountsFromLabel(t *testing.T) {

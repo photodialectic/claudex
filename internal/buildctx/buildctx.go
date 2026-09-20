@@ -6,6 +6,9 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
+
+	"github.com/photodialectic/claudex/internal/harness"
 )
 
 //go:embed Dockerfile init-firewall.sh CLAUDEX.md .tmux.conf .vimrc google-docs-mcp/**
@@ -30,6 +33,12 @@ func PrepareBuildContext() (string, func() error, error) {
 			os.RemoveAll(tmpDir)
 			return "", nil, fmt.Errorf("cannot write %s to temp dir: %w", name, err)
 		}
+	}
+
+	// Inject generated per-tool install layers into the Dockerfile template.
+	if err := injectHarnessLayers(tmpDir); err != nil {
+		os.RemoveAll(tmpDir)
+		return "", nil, err
 	}
 
 	// Copy embedded MCP server files/directories
@@ -57,4 +66,22 @@ func PrepareBuildContext() (string, func() error, error) {
 
 	cleanup := func() error { return os.RemoveAll(tmpDir) }
 	return tmpDir, cleanup, nil
+}
+
+// injectHarnessLayers replaces the Dockerfile marker with the generated
+// per-tool install layers from the harness registry.
+func injectHarnessLayers(tmpDir string) error {
+	path := filepath.Join(tmpDir, "Dockerfile")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("cannot read generated Dockerfile: %w", err)
+	}
+	rendered := strings.Replace(string(data), harness.DockerfileMarker, harness.RenderDockerfileLayers(), 1)
+	if strings.Contains(rendered, harness.DockerfileMarker) {
+		return fmt.Errorf("Dockerfile marker %q not found", harness.DockerfileMarker)
+	}
+	if err := os.WriteFile(path, []byte(rendered), 0644); err != nil {
+		return fmt.Errorf("cannot write generated Dockerfile: %w", err)
+	}
+	return nil
 }

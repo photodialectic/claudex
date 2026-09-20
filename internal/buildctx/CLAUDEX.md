@@ -66,7 +66,8 @@ sudo docker exec backend_service go test ./...
    (but complete OAuth while HTTP mode is active).
 3. Hit `POST /auth/start` (or call the `start_google_auth_flow` tool) to get the consent URL.
 4. Complete the browser flow; the `/auth/callback` endpoint writes cached tokens into
-   `/home/node/.claudex` (persisted from your host).
+   `/home/node/.claudex`, persisted in the `claudex-claudex` volume. Back them up to your
+   host with `claudex harness pull claudex`.
 5. Wire your MCP client to `http://localhost:8810/mcp` to use the Google Docs tools.
    Content you send to `create/append/replace` is interpreted as Markdown and converted
    to Docs headings, lists, and inline styles. Provide `tab_id` parameters (or call

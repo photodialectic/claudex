@@ -26,6 +26,9 @@ type Docker interface {
 	ExecInteractive(name string, cmd []string, in io.Reader, out, errOut io.Writer) error
 	ExecOutput(name string, cmd []string) ([]byte, error)
 	Logs(name string, tail int) ([]byte, error)
+	VolumeCreate(name string) (bool, error)
+	CopyHostToVolume(hostPath, volume, volumePath string) error
+	CopyVolumeToHost(volume, volumePath, hostPath string) error
 }
 
 // BuildOptions configures docker build behaviour.
@@ -61,6 +64,56 @@ func (CLI) Run(args ...string) error {
 func (CLI) Exec(args ...string) error { return (&CLI{}).Run(append([]string{"exec"}, args...)...) }
 
 func (CLI) CP(src, dst string) error { return (&CLI{}).Run("cp", src, dst) }
+
+func runDocker(args ...string) error {
+	cmd := exec.Command("docker", args...)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("docker %s: %v: %s", strings.Join(args, " "), err, string(out))
+	}
+	return nil
+}
+
+// VolumeCreate ensures a named volume exists, returning true when it was
+// newly created (i.e. it did not already exist).
+func (CLI) VolumeCreate(name string) (bool, error) {
+	out, err := dockerOutput("volume", "ls", "-q")
+	if err != nil {
+		return false, err
+	}
+	for _, line := range strings.Fields(string(out)) {
+		if line == name {
+			return false, nil
+		}
+	}
+	if err := runDocker("volume", "create", name); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// CopyHostToVolume copies a host path into a named volume using a throwaway
+// helper container run as root, then chowns the result back to node so the
+// main (non-root) container can still read/write it. When volumePath is empty
+// the host path is a directory and its contents are copied into the volume
+// root; otherwise it is treated as a single file copied to volumePath within
+// the volume.
+func (CLI) CopyHostToVolume(hostPath, volume, volumePath string) error {
+	if volumePath == "" {
+		return runDocker("run", "--rm", "-u", "root", "-v", volume+":/data", "-v", hostPath+":/src", "claudex", "sh", "-c", "cp -a /src/. /data/ && chown -R node:node /data")
+	}
+	return runDocker("run", "--rm", "-u", "root", "-v", volume+":/data", "-v", hostPath+":/src", "claudex", "sh", "-c", "cp /src /data/"+volumePath+" && chown node:node /data/"+volumePath)
+}
+
+// CopyVolumeToHost copies from a named volume to a host path. Like its
+// counterpart CopyHostToVolume, the throwaway helper runs as root so it can
+// read regardless of the volume's ownership and preserve permissions.
+func (CLI) CopyVolumeToHost(volume, volumePath, hostPath string) error {
+	if volumePath == "" {
+		return runDocker("run", "--rm", "-u", "root", "-v", volume+":/data", "-v", hostPath+":/src", "claudex", "sh", "-c", "cp -a /data/. /src/")
+	}
+	return runDocker("run", "--rm", "-u", "root", "-v", volume+":/data", "-v", hostPath+":/src", "claudex", "sh", "-c", "cp /data/"+volumePath+" /src")
+}
 
 func (CLI) Start(name string) error { return (&CLI{}).Run("start", name) }
 

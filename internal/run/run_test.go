@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"claudex/internal/dockerx"
+	"github.com/photodialectic/claudex/internal/dockerx"
 )
 
 func TestParseArgsAndDerive(t *testing.T) {

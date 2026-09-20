@@ -11,6 +11,7 @@ import (
 	"github.com/photodialectic/claudex/internal/buildctx"
 	"github.com/photodialectic/claudex/internal/containers"
 	"github.com/photodialectic/claudex/internal/dockerx"
+	"github.com/photodialectic/claudex/internal/harness"
 	"github.com/photodialectic/claudex/internal/version"
 	"github.com/photodialectic/claudex/internal/workspace"
 )
@@ -100,13 +101,7 @@ func (o Options) BuildRunArgs() ([]string, error) {
 	var args []string
 	args = append(args, "run", "--name", o.Name, "-d")
 
-	var envs []string
-	envs = append(envs, "OPENAI_API_KEY", "AI_API_MK", "GEMINI_API_KEY", "GITHUB_MCP_PAT", "DO_MODEL_ACCESS_KEY", "AI_AGENT_MK")
-	for _, e := range envs {
-		if os.Getenv(e) != "" {
-			args = append(args, "-e", e)
-		}
-	}
+	args = append(args, configEnvArgs()...)
 
 	args = append(args, "--cap-add", "NET_ADMIN", "--cap-add", "NET_RAW")
 
@@ -118,25 +113,9 @@ func (o Options) BuildRunArgs() ([]string, error) {
 	if _, err := os.Stat("/var/run/docker.sock"); err == nil {
 		args = append(args, "-v", "/var/run/docker.sock:/var/run/docker.sock")
 	}
-	// config dirs
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return nil, err
-	}
-	claudeJson := filepath.Join(home, ".claude.json")
-	if fi, err := os.Stat(claudeJson); err == nil && !fi.IsDir() {
-		args = append(args, "-v", fmt.Sprintf("%s:/home/node/.claude.json", claudeJson))
-	}
-	for _, dir := range []string{"claude", "codex", "copilot", "gemini"} {
-		configDir := filepath.Join(home, "."+dir)
-		if fi, err := os.Stat(configDir); err == nil && fi.IsDir() {
-			args = append(args, "-v", fmt.Sprintf("%s:/home/node/.%s", configDir, dir))
-		}
-	}
-	claudexDir := filepath.Join(home, ".claudex")
-	if fi, err := os.Stat(claudexDir); err == nil && fi.IsDir() {
-		args = append(args, "-v", fmt.Sprintf("%s:/home/node/.claudex", claudexDir))
-	}
+
+	// harness config volumes
+	args = append(args, configMountArgs()...)
 
 	if o.CACertFile != "" {
 		abs, err := filepath.Abs(o.CACertFile)
@@ -147,18 +126,6 @@ func (o Options) BuildRunArgs() ([]string, error) {
 			return nil, fmt.Errorf("--ca-cert: %s is not a readable file", o.CACertFile)
 		}
 		args = append(args, "-v", fmt.Sprintf("%s:/usr/local/share/ca-certificates/claudex-custom.crt:ro", abs))
-	}
-
-	// OpenCode Config mount (if exists)
-	opencodeConfig := filepath.Join(home, ".config/opencode")
-	if fi, err := os.Stat(opencodeConfig); err == nil && fi.IsDir() {
-		args = append(args, "-v", fmt.Sprintf("%s:/home/node/.config/opencode", opencodeConfig))
-	}
-
-	// OpenCode Storage mount (if exists)
-	opencodeStorage := filepath.Join(home, ".local/share/opencode")
-	if fi, err := os.Stat(opencodeStorage); err == nil && fi.IsDir() {
-		args = append(args, "-v", fmt.Sprintf("%s:/home/node/.local/share/opencode", opencodeStorage))
 	}
 
 	// workspace mounts
@@ -250,6 +217,10 @@ func Run(args []string, in io.Reader, out, errOut io.Writer, dx dockerx.Docker) 
 
 func createAndAttach(o Options, in io.Reader, out, errOut io.Writer, dx dockerx.Docker) error {
 	fmt.Fprintf(out, "Creating container %s...\n", o.Name)
+	seeds, err := prepareConfigVolumes(dx)
+	if err != nil {
+		return err
+	}
 	runArgs, err := o.BuildRunArgs()
 	if err != nil {
 		return err
@@ -264,6 +235,7 @@ func createAndAttach(o Options, in io.Reader, out, errOut io.Writer, dx dockerx.
 		}
 		return fmt.Errorf("container %s did not stay running after creation; inspect logs and retry with --replace", o.Name)
 	}
+	seedVolumes(dx, seeds, out, errOut)
 	maybeInitGit(o.SkipGit, dx, o.Name, out, errOut)
 	maybeInitFirewall(o.Firewall, dx, o.Name, out, errOut)
 	maybeInstallCA(o.CACertFile, dx, o.Name, out, errOut)
@@ -323,4 +295,63 @@ func waitRunning(dx dockerx.Docker, name string, timeout time.Duration) bool {
 		time.Sleep(200 * time.Millisecond)
 	}
 	return false
+}
+
+// configMountArgs returns the -v mount arguments for every harness volume.
+func configMountArgs() []string {
+	var args []string
+	for _, h := range harness.Registry() {
+		for _, m := range h.Mounts {
+			args = append(args, "-v", m.Volume+":"+m.Container)
+		}
+	}
+	return args
+}
+
+// configEnvArgs returns the -e arguments for every forwarded env var that is set.
+func configEnvArgs() []string {
+	var args []string
+	for _, k := range harness.EnvVars() {
+		if os.Getenv(k) != "" {
+			args = append(args, "-e", k)
+		}
+	}
+	return args
+}
+
+// prepareConfigVolumes ensures every harness volume exists and returns the
+// mounts whose volumes were newly created and therefore need seeding from the
+// host (when a matching host path exists).
+func prepareConfigVolumes(dx dockerx.Docker) ([]harness.Mount, error) {
+	var seeds []harness.Mount
+	for _, h := range harness.Registry() {
+		for _, m := range h.Mounts {
+			created, err := dx.VolumeCreate(m.Volume)
+			if err != nil {
+				return nil, err
+			}
+			if !created {
+				continue
+			}
+			hp := m.HostPath()
+			if hp == "" {
+				continue
+			}
+			if _, err := os.Stat(hp); err != nil {
+				continue
+			}
+			seeds = append(seeds, m)
+		}
+	}
+	return seeds, nil
+}
+
+// seedVolumes copies host config into freshly created (empty) volumes.
+func seedVolumes(dx dockerx.Docker, seeds []harness.Mount, out, errOut io.Writer) {
+	for _, m := range seeds {
+		fmt.Fprintf(out, "Seeding %s volume from %s...\n", m.Volume, m.HostPath())
+		if err := dx.CopyHostToVolume(m.HostPath(), m.Volume, m.VolumePath); err != nil {
+			fmt.Fprintf(errOut, "Warning: failed to seed %s: %v\n", m.Volume, err)
+		}
+	}
 }

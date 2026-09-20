@@ -66,8 +66,12 @@ ENV LANG=en_US.UTF-8
 ENV LC_ALL=en_US.UTF-8
 
 # Create workspace, context, config, and instructions directories and set permissions
-RUN mkdir -p /workspace /context /home/node/.claude /home/node/.codex /home/node/.copilot /home/node/.gemini /home/node/.claudex /home/node/instructions && \
-  chown -R node:node /workspace /context /home/node/.claude /home/node/.codex /home/node/.copilot /home/node/.gemini /home/node/.claudex /home/node/instructions
+RUN mkdir -p /workspace /context /home/node/.claude /home/node/.codex /home/node/.copilot /home/node/.gemini /home/node/.claudex /home/node/.claude-state /home/node/instructions && \
+  chown -R node:node /workspace /context /home/node/.claude /home/node/.codex /home/node/.copilot /home/node/.gemini /home/node/.claudex /home/node/.claude-state /home/node/instructions
+
+# ~/.claude.json is backed by a named volume mounted at /home/node/.claude-state
+# (volumes are directories, so a file mountpoint is served via symlink).
+RUN ln -sfn /home/node/.claude-state/claude.json /home/node/.claude.json
 
 # Generate UTF-8 locale (fixes unicode/box drawing in TUIs)
 RUN sed -i 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen && \
@@ -124,14 +128,9 @@ RUN sed -i 's|\[\[ -f ~/.p10k.zsh \]\] && source ~/.p10k.zsh|# p10k disabled her
   'fi' \
   '' | cat - /home/node/.zshrc > /home/node/.zshrc.tmp && mv /home/node/.zshrc.tmp /home/node/.zshrc
 
-# Install CLI toolchain; build arg lets update builds bust cache for this layer
-ARG CLAUDEX_BUILD_VERSION=0
-RUN echo "Installing CLI tools (build version: ${CLAUDEX_BUILD_VERSION})" \
-  && curl -fsSL https://claude.ai/install.sh | bash \
-  && npm install -g @openai/codex \
-  && npm install -g @google/gemini-cli \
-  && npm install -g @github/copilot \
-  && npm install -g opencode-ai
+# Install CLI toolchain; one ARG+RUN layer per tool, generated at build time
+# from the harness registry (see internal/harness.RenderDockerfileLayers).
+# CLAUDEX_HARNESS_LAYERS
 
 COPY CLAUDEX.md /workspace/CLAUDE.md
 COPY CLAUDEX.md /workspace/AGENTS.md
