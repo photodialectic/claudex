@@ -253,6 +253,21 @@ var registry = []Harness{
 		},
 	},
 	{
+		Name:    "pi",
+		EnvVars: []string{},
+		Install: []string{
+			"npm install -g --ignore-scripts @earendil-works/pi-coding-agent",
+		},
+		Mounts: []Mount{
+			{
+				HostRel:   ".pi",
+				Container: "/home/node/.pi",
+				Volume:    "claudex-pi",
+				Kind:      KindDir,
+			},
+		},
+	},
+	{
 		Name: "claudex",
 		Mounts: []Mount{
 			{
