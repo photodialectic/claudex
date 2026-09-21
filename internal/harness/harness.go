@@ -96,9 +96,15 @@ func RenderDockerfileLayers() string {
 }
 
 // RenderDockerfileMountDirs renders a single RUN directive that creates and
-// chowns every harness config directory so a newly mounted (empty) named
-// volume never surfaces as root:root. Derives the set directly from the
-// harness registry mount targets, keeping this in sync with harnesses.yaml.
+// chowns the agent config directories so a newly mounted (empty) named volume
+// never surfaces as root:root. Derives the set directly from the harness
+// registry mount targets, keeping this in sync with harnesses.yaml.
+//
+// chown targets /home/node rather than just the mount dirs because mkdir -p
+// creates intermediate parent directories (e.g. /home/node/.config for
+// /home/node/.config/opencode) as root; without chowning those parents, later
+// installers running as the node user (uv, claude, etc.) cannot create their
+// own subdirectories under them.
 func RenderDockerfileMountDirs() string {
 	seen := map[string]bool{}
 	var dirs []string
@@ -112,7 +118,7 @@ func RenderDockerfileMountDirs() string {
 		}
 	}
 	sort.Strings(dirs)
-	return "RUN mkdir -p " + strings.Join(dirs, " ") + " && chown -R node:node " + strings.Join(dirs, " ")
+	return "RUN mkdir -p " + strings.Join(dirs, " ") + " && chown -R node:node /home/node"
 }
 
 // Registry returns all supported harnesses in declaration order.
