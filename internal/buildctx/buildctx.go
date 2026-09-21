@@ -68,17 +68,21 @@ func PrepareBuildContext() (string, func() error, error) {
 	return tmpDir, cleanup, nil
 }
 
-// injectHarnessLayers replaces the Dockerfile marker with the generated
-// per-tool install layers from the harness registry.
+// injectHarnessLayers replaces the Dockerfile markers with the generated
+// per-tool install layers and the harness config directory directive.
 func injectHarnessLayers(tmpDir string) error {
 	path := filepath.Join(tmpDir, "Dockerfile")
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return fmt.Errorf("cannot read generated Dockerfile: %w", err)
 	}
-	rendered := strings.Replace(string(data), harness.DockerfileMarker, harness.RenderDockerfileLayers(), 1)
-	if strings.Contains(rendered, harness.DockerfileMarker) {
-		return fmt.Errorf("Dockerfile marker %q not found", harness.DockerfileMarker)
+	rendered := string(data)
+	rendered = strings.Replace(rendered, harness.DockerfileMarker, harness.RenderDockerfileLayers(), 1)
+	rendered = strings.Replace(rendered, harness.DockerfileMountDirsMarker, harness.RenderDockerfileMountDirs(), 1)
+	for _, marker := range []string{harness.DockerfileMarker, harness.DockerfileMountDirsMarker} {
+		if strings.Contains(rendered, marker) {
+			return fmt.Errorf("Dockerfile marker %q not found", marker)
+		}
 	}
 	if err := os.WriteFile(path, []byte(rendered), 0644); err != nil {
 		return fmt.Errorf("cannot write generated Dockerfile: %w", err)

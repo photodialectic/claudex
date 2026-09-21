@@ -65,9 +65,13 @@ ENV COLORTERM=truecolor
 ENV LANG=en_US.UTF-8
 ENV LC_ALL=en_US.UTF-8
 
-# Create workspace, context, config, and instructions directories and set permissions
-RUN mkdir -p /workspace /context /home/node/.claude /home/node/.codex /home/node/.copilot /home/node/.gemini /home/node/.claudex /home/node/.claude-state /home/node/instructions && \
-  chown -R node:node /workspace /context /home/node/.claude /home/node/.codex /home/node/.copilot /home/node/.gemini /home/node/.claudex /home/node/.claude-state /home/node/instructions
+# Create workspace, context, and instructions directories and set permissions
+RUN mkdir -p /workspace /context /home/node/instructions && \
+  chown -R node:node /workspace /context /home/node/instructions
+
+# Create agent config directories and set permissions (generated at build time
+# from the harness registry mount targets; see internal/harness.RenderDockerfileMountDirs).
+# CLAUDEX_HARNESS_DIRS
 
 # ~/.claude.json is backed by a named volume mounted at /home/node/.claude-state
 # (volumes are directories, so a file mountpoint is served via symlink).
@@ -135,8 +139,8 @@ RUN sed -i 's|\[\[ -f ~/.p10k.zsh \]\] && source ~/.p10k.zsh|# p10k disabled her
 COPY CLAUDEX.md /workspace/CLAUDE.md
 COPY CLAUDEX.md /workspace/AGENTS.md
 COPY CLAUDEX.md /workspace/GEMINI.md
-COPY .tmux.conf /home/node/.tmux.conf
-COPY .vimrc /home/node/.vimrc
+COPY --chown=node:node .tmux.conf /home/node/.tmux.conf
+COPY --chown=node:node .vimrc /home/node/.vimrc
 
 # Copy and set up firewall script
 COPY init-firewall.sh /usr/local/bin/

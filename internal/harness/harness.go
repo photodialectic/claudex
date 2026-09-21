@@ -69,6 +69,10 @@ type Harness struct {
 // generated per-tool install layers.
 const DockerfileMarker = "# CLAUDEX_HARNESS_LAYERS"
 
+// DockerfileMountDirsMarker is the line in the embedded Dockerfile replaced
+// with the generated mkdir/chown directive for every harness config directory.
+const DockerfileMountDirsMarker = "# CLAUDEX_HARNESS_DIRS"
+
 // ToolBuildArg returns the image build arg used to bust a single tool's
 // install layer during `claudex harness update <name>`.
 func ToolBuildArg(name string) string { return "CLAUDEX_TOOL_" + name }
@@ -89,6 +93,26 @@ func RenderDockerfileLayers() string {
 		}
 	}
 	return b.String()
+}
+
+// RenderDockerfileMountDirs renders a single RUN directive that creates and
+// chowns every harness config directory so a newly mounted (empty) named
+// volume never surfaces as root:root. Derives the set directly from the
+// harness registry mount targets, keeping this in sync with harnesses.yaml.
+func RenderDockerfileMountDirs() string {
+	seen := map[string]bool{}
+	var dirs []string
+	for _, h := range registry {
+		for _, m := range h.Mounts {
+			if m.Container == "" || seen[m.Container] {
+				continue
+			}
+			seen[m.Container] = true
+			dirs = append(dirs, m.Container)
+		}
+	}
+	sort.Strings(dirs)
+	return "RUN mkdir -p " + strings.Join(dirs, " ") + " && chown -R node:node " + strings.Join(dirs, " ")
 }
 
 // Registry returns all supported harnesses in declaration order.

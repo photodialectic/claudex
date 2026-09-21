@@ -31,4 +31,12 @@ func TestPrepareBuildContextInjectsHarnessLayers(t *testing.T) {
 	if strings.Contains(rendered, "CLAUDEX_BUILD_VERSION") {
 		t.Fatalf("old monolithic build arg should be gone:\n%s", rendered)
 	}
+	if strings.Contains(rendered, "# CLAUDEX_HARNESS_DIRS") {
+		t.Fatalf("mount dirs marker was not replaced:\n%s", rendered)
+	}
+	for _, dir := range []string{"/home/node/.pi", "/home/node/.config/opencode", "/home/node/.local/share/opencode"} {
+		if !strings.Contains(rendered, dir) {
+			t.Fatalf("missing generated mount dir %s in Dockerfile:\n%s", dir, rendered)
+		}
+	}
 }
