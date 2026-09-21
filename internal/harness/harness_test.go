@@ -102,6 +102,31 @@ func TestToolBuildArg(t *testing.T) {
 	}
 }
 
+func TestRenderDockerfileMountDirsCoversEveryMountTarget(t *testing.T) {
+	rendered := RenderDockerfileMountDirs()
+	if !strings.HasPrefix(rendered, "RUN mkdir -p ") {
+		t.Fatalf("expected RUN mkdir -p prefix, got:\n%s", rendered)
+	}
+	if !strings.Contains(rendered, "&& chown -R node:node ") {
+		t.Fatalf("expected chown directive, got:\n%s", rendered)
+	}
+	for _, dir := range []string{
+		"/home/node/.claude",
+		"/home/node/.claude-state",
+		"/home/node/.codex",
+		"/home/node/.copilot",
+		"/home/node/.gemini",
+		"/home/node/.pi",
+		"/home/node/.claudex",
+		"/home/node/.config/opencode",
+		"/home/node/.local/share/opencode",
+	} {
+		if !strings.Contains(rendered, dir) {
+			t.Fatalf("missing mount target %q in:\n%s", dir, rendered)
+		}
+	}
+}
+
 func TestRenderDockerfileLayersContainsEveryTool(t *testing.T) {
 	rendered := RenderDockerfileLayers()
 	for _, n := range []string{"claude", "codex", "copilot", "gemini", "opencode"} {
