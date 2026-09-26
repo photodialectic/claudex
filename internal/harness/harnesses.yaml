@@ -53,7 +53,7 @@ harnesses:
       - DO_MODEL_ACCESS_KEY
       - AI_AGENT_MK
     install:
-      - npm install -g opencode-ai
+      - npm install -g @opencode/cli
     mounts:
       - host_rel: .config/opencode
         container: /home/node/.config/opencode
