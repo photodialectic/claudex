@@ -86,9 +86,6 @@ List claudex containers:
 Destroy claudex containers:
   %s destroy [--name <NAME> | --signature <HASH> | --all] [--running|--stopped] [--force|--prune-stopped]
 
-Guided Google Docs OAuth:
-  %s auth google-docs-mcp [--container <NAME>]
-
 Replay an OAuth redirect callback inside a container:
   %s auth callback [--container <NAME>] <callback-url>
 
@@ -96,6 +93,6 @@ Manage harness config volumes:
   %s harness list
   %s harness push [<NAME> ...]
   %s harness pull [<NAME> ...]
-`, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog)
+`, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog)
 	return nil
 }
