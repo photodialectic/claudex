@@ -32,10 +32,12 @@ func Execute(args []string) error {
 		return commands.Pull(args[1:])
 	case "list":
 		return commands.List(args[1:])
+	case "bash":
+		return commands.Bash(args[1:])
 	case "destroy":
 		return commands.Destroy(args[1:])
-	case "auth":
-		return commands.Auth(args[1:])
+	case "callback":
+		return commands.Callback(args[1:])
 	case "harness":
 		return commands.Harness(args[1:])
 	case "-h", "--help", "help":
@@ -86,13 +88,16 @@ List claudex containers:
 Destroy claudex containers:
   %s destroy [--name <NAME> | --signature <HASH> | --all] [--running|--stopped] [--force|--prune-stopped]
 
+Open an interactive bash shell in a running container:
+  %s bash [<NAME>]
+
 Replay an OAuth redirect callback inside a container:
-  %s auth callback [--container <NAME>] <callback-url>
+  %s callback [--name <NAME>] <callback-url>
 
 Manage harness config volumes:
   %s harness list
   %s harness push [<NAME> ...]
   %s harness pull [<NAME> ...]
-`, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog)
+`, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog)
 	return nil
 }

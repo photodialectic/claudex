@@ -9,41 +9,33 @@ import (
 	"github.com/photodialectic/claudex/internal/dockerx"
 )
 
-// Auth runs `claudex auth` workflows.
-func Auth(args []string) error {
-	if len(args) == 0 {
-		return errors.New("usage: claudex auth callback [--container <name>] <callback-url>")
-	}
-	switch args[0] {
-	case "callback":
-		return authCallback(args[1:])
-	default:
-		return fmt.Errorf("unknown auth subcommand %q", args[0])
-	}
-}
-
-// authCallback replays an OAuth redirect URL inside a running Claudex
+// Callback replays an OAuth redirect URL inside a running Claudex
 // container. This is useful when an MCP server inside the container drives an
 // OAuth flow and the browser callback (redirected to http://localhost:PORT/...)
 // needs to be re-issued inside the container where that MCP server listens.
-func authCallback(args []string) error {
-	var containerFlag string
+func Callback(args []string) error {
+	var nameFlag string
 	var rest []string
 	for i := 0; i < len(args); i++ {
 		a := args[i]
 		switch a {
-		case "--container":
+		case "--name":
 			if i+1 >= len(args) {
-				return errors.New("--container requires a value")
+				return errors.New("--name requires a value")
 			}
-			containerFlag = args[i+1]
+			nameFlag = args[i+1]
 			i++
+		case "--container":
+			return errors.New("--container is not supported; use --name <NAME>")
 		default:
+			if strings.HasPrefix(a, "-") {
+				return fmt.Errorf("unknown arg: %s", a)
+			}
 			rest = append(rest, a)
 		}
 	}
 	if len(rest) == 0 {
-		return errors.New("usage: claudex auth callback [--container <name>] <callback-url>")
+		return errors.New("usage: claudex callback [--name <NAME>] <callback-url>")
 	}
 	callback := rest[0]
 	if _, err := url.Parse(callback); err != nil {
@@ -51,7 +43,7 @@ func authCallback(args []string) error {
 	}
 
 	dx := &dockerx.CLI{}
-	target, err := pickRunning(dx, containerFlag)
+	target, err := pickRunning(dx, nameFlag)
 	if err != nil {
 		return err
 	}

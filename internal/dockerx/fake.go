@@ -18,6 +18,10 @@ type Fake struct {
 	ImageExistsVal     bool
 	ImageExistsErr     error
 	ExecInteractiveErr error
+	ExecInteractiveCalls []struct {
+		Name string
+		Cmd  []string
+	}
 	ExecOutputOut      []byte
 	ExecOutputErr      error
 	LogsOut            []byte
@@ -78,6 +82,10 @@ func (f *Fake) Build(tag, contextDir string, opts BuildOptions) error {
 	return f.BuildErr
 }
 func (f *Fake) ExecInteractive(name string, cmd []string, in io.Reader, out, errOut io.Writer) error {
+	f.ExecInteractiveCalls = append(f.ExecInteractiveCalls, struct {
+		Name string
+		Cmd  []string
+	}{Name: name, Cmd: append([]string(nil), cmd...)})
 	return f.ExecInteractiveErr
 }
 func (f *Fake) ExecOutput(name string, cmd []string) ([]byte, error) {
