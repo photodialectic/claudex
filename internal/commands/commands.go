@@ -431,6 +431,42 @@ func Pull(args []string) error {
 	return nil
 }
 
+// Bash opens an interactive bash shell in a running claudex container,
+// chosen interactively from the running containers (or given by name).
+func Bash(args []string) error {
+	name, err := parseBashArgs(args)
+	if err != nil {
+		return err
+	}
+	return bashWithDocker(&dockerx.CLI{}, name)
+}
+
+// parseBashArgs accepts an optional positional container name.
+func parseBashArgs(args []string) (string, error) {
+	if len(args) == 0 {
+		return "", nil
+	}
+	if args[0] == "--name" {
+		return "", fmt.Errorf("--name is not supported; pass the container name directly: claudex bash <name>")
+	}
+	if strings.HasPrefix(args[0], "-") {
+		return "", fmt.Errorf("unknown arg: %s", args[0])
+	}
+	if len(args) > 1 {
+		return "", fmt.Errorf("unexpected arg: %s", args[1])
+	}
+	return args[0], nil
+}
+
+func bashWithDocker(dx dockerx.Docker, name string) error {
+	target, err := pickRunning(dx, name)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("Attaching bash to %s. Type 'exit' to leave.\n", target)
+	return dx.ExecInteractive(target, []string{"bash"}, os.Stdin, os.Stdout, os.Stderr)
+}
+
 // pickRunning returns a running container name by explicit value or unique running instance.
 func pickRunning(dx dockerx.Docker, name string) (string, error) {
 	if name != "" {
@@ -473,7 +509,7 @@ func pickRunning(dx dockerx.Docker, name string) (string, error) {
 			for _, c := range cons {
 				names = append(names, c.Name)
 			}
-			return "", fmt.Errorf("multiple running claudex containers. Specify --name. Choices: %s", strings.Join(names, ", "))
+			return "", fmt.Errorf("multiple running claudex containers; specify one by name. Choices: %s", strings.Join(names, ", "))
 		}
 		return cons[idx-1].Name, nil
 	}
@@ -481,5 +517,5 @@ func pickRunning(dx dockerx.Docker, name string) (string, error) {
 	for _, c := range cons {
 		names = append(names, c.Name)
 	}
-	return "", fmt.Errorf("multiple running claudex containers. Specify --name. Choices: %s", strings.Join(names, ", "))
+	return "", fmt.Errorf("multiple running claudex containers; specify one by name. Choices: %s", strings.Join(names, ", "))
 }

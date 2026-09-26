@@ -160,6 +160,11 @@ claudex destroy [OPTIONS]
   --prune-stopped         # Remove all stopped containers
 ```
 
+**Open an interactive bash shell in a running container:**
+```bash
+claudex bash [<NAME>]           # Prompts for selection when multiple are running
+```
+
 **File operations:**
 ```bash
 claudex push [--name <NAME>] <file_or_dir> [...]          # Copy to container

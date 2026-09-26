@@ -46,6 +46,105 @@ func TestPickRunning_AutoSelectionCases(t *testing.T) {
 	_ = errors.New // avoid unused import if assertions change
 }
 
+func TestParseBashArgs(t *testing.T) {
+	name, err := parseBashArgs([]string{"r1"})
+	if err != nil || name != "r1" {
+		t.Fatalf("expected r1, got %q err=%v", name, err)
+	}
+	if name, err := parseBashArgs(nil); err != nil || name != "" {
+		t.Fatalf("expected empty name, got %q err=%v", name, err)
+	}
+	if _, err := parseBashArgs([]string{"--name", "r1"}); err == nil || !strings.Contains(err.Error(), "--name is not supported") {
+		t.Fatalf("expected --name hint, got %v", err)
+	}
+	if _, err := parseBashArgs([]string{"--bogus"}); err == nil || !strings.Contains(err.Error(), "unknown arg") {
+		t.Fatalf("expected unknown arg error, got %v", err)
+	}
+	if _, err := parseBashArgs([]string{"r1", "r2"}); err == nil || !strings.Contains(err.Error(), "unexpected arg") {
+		t.Fatalf("expected unexpected arg error, got %v", err)
+	}
+}
+
+func TestBashWithDocker_ExecsBashInTarget(t *testing.T) {
+	f := &dockerx.Fake{Containers: map[string]dockerx.Container{
+		"r1": {Name: "r1", Status: "running", Labels: map[string]string{"com.claudex.signature": "x"}},
+	}}
+	if err := bashWithDocker(f, "r1"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(f.ExecInteractiveCalls) != 1 {
+		t.Fatalf("expected one exec call, got %d", len(f.ExecInteractiveCalls))
+	}
+	call := f.ExecInteractiveCalls[0]
+	if call.Name != "r1" || len(call.Cmd) != 1 || call.Cmd[0] != "bash" {
+		t.Fatalf("unexpected exec call %+v", call)
+	}
+}
+
+func TestBashWithDocker_AutoPicksSingleRunning(t *testing.T) {
+	f := &dockerx.Fake{Containers: map[string]dockerx.Container{
+		"only": {Name: "only", Status: "running", Labels: map[string]string{"com.claudex.signature": "x"}},
+	}}
+	if err := bashWithDocker(f, ""); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(f.ExecInteractiveCalls) != 1 || f.ExecInteractiveCalls[0].Name != "only" {
+		t.Fatalf("expected auto-pick of 'only', got %+v", f.ExecInteractiveCalls)
+	}
+}
+
+func TestBashWithDocker_StatusErrors(t *testing.T) {
+	// No running containers
+	f := &dockerx.Fake{Containers: map[string]dockerx.Container{}}
+	if err := bashWithDocker(f, ""); err == nil || !strings.Contains(err.Error(), "no running claudex containers") {
+		t.Fatalf("expected no running error, got %v", err)
+	}
+	if len(f.ExecInteractiveCalls) != 0 {
+		t.Fatalf("expected no exec calls, got %+v", f.ExecInteractiveCalls)
+	}
+
+	// Named container not running
+	f2 := &dockerx.Fake{Containers: map[string]dockerx.Container{
+		"s1": {Name: "s1", Status: "exited", Labels: map[string]string{"com.claudex.signature": "x"}},
+	}}
+	if err := bashWithDocker(f2, "s1"); err == nil || !strings.Contains(err.Error(), "not running") {
+		t.Fatalf("expected not running error, got %v", err)
+	}
+	if len(f2.ExecInteractiveCalls) != 0 {
+		t.Fatalf("expected no exec calls, got %+v", f2.ExecInteractiveCalls)
+	}
+
+	// Multiple running containers without --name (non-interactive stdin)
+	f3 := &dockerx.Fake{Containers: map[string]dockerx.Container{
+		"a": {Name: "a", Status: "running", Labels: map[string]string{"com.claudex.signature": "x"}},
+		"b": {Name: "b", Status: "running", Labels: map[string]string{"com.claudex.signature": "x"}},
+	}}
+	if err := bashWithDocker(f3, ""); err == nil || !strings.Contains(err.Error(), "multiple running claudex containers") {
+		t.Fatalf("expected multiple running error, got %v", err)
+	}
+	if len(f3.ExecInteractiveCalls) != 0 {
+		t.Fatalf("expected no exec calls, got %+v", f3.ExecInteractiveCalls)
+	}
+}
+
+func TestCallbackUsageErrors(t *testing.T) {
+	if err := Callback(nil); err == nil || !strings.Contains(err.Error(), "usage: claudex callback") {
+		t.Fatalf("expected usage error, got %v", err)
+	}
+	if err := Callback([]string{"--name"}); err == nil || !strings.Contains(err.Error(), "--name requires a value") {
+		t.Fatalf("expected missing value error, got %v", err)
+	}
+	if err := Callback([]string{"--container", "x", "http://localhost/"}); err == nil || !strings.Contains(err.Error(), "--container is not supported") {
+		t.Fatalf("expected --container hint, got %v", err)
+	}
+	if err := Callback([]string{"--bogus", "http://localhost/"}); err == nil || !strings.Contains(err.Error(), "unknown arg") {
+		t.Fatalf("expected unknown arg error, got %v", err)
+	}
+	if err := Callback([]string{"://bad"}); err == nil || !strings.Contains(err.Error(), "invalid callback URL") {
+		t.Fatalf("expected invalid URL error, got %v", err)
+	}
+}
+
 func TestResolveUpdateTargetsAll(t *testing.T) {
 	names, err := resolveUpdateTargets(nil)
 	if err != nil {
