@@ -186,8 +186,6 @@ claudex harness update [<name> ...]  # Rebuild one or all tool image layers
 
 - `.claude.json` is merged on push: host-owned keys (`mcpServers`, `permissions`,
   `hooks`, etc.) are overlaid without clobbering `projects` session history.
-- Google Docs OAuth tokens persist in the `claudex-claudex` volume; run
-  `claudex harness pull claudex` to back them up to your host.
 
 ### Adding a Harness
 
@@ -275,34 +273,6 @@ Inside the container:
 
 
 ## Experimental Features
-
-### Built-in Google Docs MCP server
-The base container now ships with a FastAPI/fastmcp server that can create,
-read, and update Google Docs through your account.
-
-- Location: `/opt/google-docs-mcp` (source lives in `internal/buildctx/google-docs-mcp`)
-- Start it inside the container with `google-docs-mcp` (installed on `$PATH`) for HTTP, or `google-docs-mcp --stdio` if your client only supports stdio transports
-- OAuth redirect defaults to `http://localhost:8810/auth/callback`. Use
-  `MCP_PUBLIC_BASE_URL` if you expose it elsewhere.
-- Drop your OAuth client JSON at `/opt/google-docs-mcp/google_oauth_client.json`
-  (or set `GOOGLE_CLIENT_CREDENTIALS`) before launching.
-- The container automatically mounts your host `~/.claudex` directory (if it exists)
-  to `/home/node/.claudex` and uses `google_oauth_client.json` / `google-docs-token.json`
-  from there by default, so your credentials persist between sessions.
-- The REST tools and MCP functions expect **Markdown** input; headings, lists, bold,
-  italics, and links are converted into native Google Docs formatting automatically. All
-  write/read endpoints accept an optional `tab_id` so you can work inside specific tabs.
-- Once running, the MCP HTTP endpoint is `http://localhost:8810/mcp`. Point Codex
-  or Claude to that transport to get the `start_google_auth_flow`, `create_google_doc`,
-  `append_google_doc`, `replace_google_doc`, `read_google_doc`, and
-  `list_google_doc_tabs` tools.
-- Run `claudex auth google-docs-mcp [--container <name>]` for a guided OAuth flow (omit
-  `--container` to pick from a list). The command starts
-  the MCP server in your container, prints the Google consent link, and prompts you to
-  paste the redirected URL so it can finish the callback and write tokens into `~/.claudex`.
-
-The server also exposes REST endpoints for `/health`, `/auth/start`, `/auth/status`,
-`/auth/callback`, and `/docs/*` which makes it easy to test outside of MCP clients.
 
 ### Docker MCP Gateway
 Docker has an [MCP Gateway](https://github.com/docker/mcp-gateway/blob/main/docs/mcp-gateway.md) you can run on your host and then connect Codex or Claude to it as an MCP server. What's nice about this is you can run a single instance of the gateway and have multiple containers connect to it as MCP servers without needing to run separate MCP servers in each container.
