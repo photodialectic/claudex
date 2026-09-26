@@ -110,36 +110,49 @@ func TestRenderDockerfileMountDirsCoversEveryMountTarget(t *testing.T) {
 	if !strings.Contains(rendered, "&& chown -R node:node ") {
 		t.Fatalf("expected chown directive, got:\n%s", rendered)
 	}
-	for _, dir := range []string{
-		"/home/node/.claude",
-		"/home/node/.claude-state",
-		"/home/node/.codex",
-		"/home/node/.copilot",
-		"/home/node/.gemini",
-		"/home/node/.pi",
-		"/home/node/.claudex",
-		"/home/node/.config/opencode",
-		"/home/node/.local/share/opencode",
-	} {
-		if !strings.Contains(rendered, dir) {
-			t.Fatalf("missing mount target %q in:\n%s", dir, rendered)
+	for _, h := range Registry() {
+		for _, m := range h.Mounts {
+			if m.Container == "" {
+				continue
+			}
+			if !strings.Contains(rendered, m.Container) {
+				t.Fatalf("missing mount target %q in:\n%s", m.Container, rendered)
+			}
 		}
 	}
 }
 
 func TestRenderDockerfileLayersContainsEveryTool(t *testing.T) {
 	rendered := RenderDockerfileLayers()
-	for _, n := range []string{"claude", "codex", "copilot", "gemini", "opencode"} {
-		if !strings.Contains(rendered, ToolBuildArg(n)) {
-			t.Fatalf("missing ARG for %q in:\n%s", n, rendered)
+	for _, h := range Registry() {
+		arg := ToolBuildArg(h.Name)
+		if len(h.Install) == 0 {
+			if strings.Contains(rendered, arg) {
+				t.Fatalf("harness %q has no install steps but rendered a layer:\n%s", h.Name, rendered)
+			}
+			continue
+		}
+		if !strings.Contains(rendered, "ARG "+arg+"=") {
+			t.Fatalf("missing ARG %s= in:\n%s", arg, rendered)
+		}
+		for _, step := range h.Install {
+			if !layerConsumesBuildArg(rendered, arg, step) {
+				t.Fatalf("missing RUN layer for %q consuming %s in:\n%s", step, arg, rendered)
+			}
 		}
 	}
-	if strings.Contains(rendered, ToolBuildArg("claudex")) {
-		t.Fatalf("claudex (no install) should not render a layer:\n%s", rendered)
-	}
-	for _, pkg := range []string{"@openai/codex", "@github/copilot", "@google/gemini-cli", "opencode-ai", "claude.ai/install.sh"} {
-		if !strings.Contains(rendered, pkg) {
-			t.Fatalf("missing install command %q in:\n%s", pkg, rendered)
+}
+
+// layerConsumesBuildArg reports whether rendered contains a RUN layer that
+// both executes step and references ${arg}, so bumping the build arg busts
+// that layer's cache — the reason the ARG + RUN pair exists.
+func layerConsumesBuildArg(rendered, arg, step string) bool {
+	for _, line := range strings.Split(rendered, "\n") {
+		if strings.HasPrefix(line, "RUN ") &&
+			strings.Contains(line, "${"+arg+"}") &&
+			strings.Contains(line, step) {
+			return true
 		}
 	}
+	return false
 }
