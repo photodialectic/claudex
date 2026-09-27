@@ -17,6 +17,12 @@ import (
 	"github.com/photodialectic/claudex/internal/workspace"
 )
 
+// Labels applied to bundle-owned session containers.
+const (
+	BundleLabel        = "com.claudex.bundle"
+	BundleVolumesLabel = "com.claudex.bundle-volumes"
+)
+
 type Options struct {
 	Network        string
 	NameOverride   string
@@ -27,9 +33,9 @@ type Options struct {
 	Firewall       bool
 	CACertFile     string
 	Workdirs       []string
-	PackID         string
+	BundleID       string
 	Image          string
-	PackImageID    string
+	BundleImageID  string
 	VolumeNames    map[string]string
 
 	// Derived
@@ -98,20 +104,20 @@ func (o *Options) Derive() error {
 		name = fmt.Sprintf("%s-%d", name, time.Now().Unix())
 	}
 	o.Name = name
-	if o.PackID != "" {
-		o.Name = "claudex-pack-" + o.PackID + "-" + o.Name
+	if o.BundleID != "" {
+		o.Name = "claudex-bundle-" + o.BundleID + "-" + o.Name
 	}
 	return nil
 }
 
-// PackVolumeName returns the Docker volume name reserved for one bundle's copy
+// BundleVolumeName returns the Docker volume name reserved for one bundle's copy
 // of a harness volume.
-func PackVolumeName(packID, original string) string {
-	return "claudex-pack-" + packID + "-" + original
+func BundleVolumeName(bundleID, original string) string {
+	return "claudex-bundle-" + bundleID + "-" + original
 }
 
-// PackImageTag returns the private image tag used by one bundle.
-func PackImageTag(packID string) string { return "claudex-pack:" + packID }
+// BundleImageTag returns the private image tag used by one bundle.
+func BundleImageTag(bundleID string) string { return "claudex-bundle:" + bundleID }
 
 // BuildRunArgs builds docker run args array based on options and env.
 func (o Options) BuildRunArgs() ([]string, error) {
@@ -127,7 +133,7 @@ func (o Options) BuildRunArgs() ([]string, error) {
 	}
 
 	// docker sock mount if present
-	if o.PackID == "" {
+	if o.BundleID == "" {
 		if _, err := os.Stat("/var/run/docker.sock"); err == nil {
 			args = append(args, "-v", "/var/run/docker.sock:/var/run/docker.sock")
 		}
@@ -156,14 +162,14 @@ func (o Options) BuildRunArgs() ([]string, error) {
 	b, _ := json.Marshal(o.Normalized)
 	mountsLabel := string(b)
 	args = append(args, "--label", "com.claudex.signature="+o.Signature, "--label", "com.claudex.version="+version.Version, "--label", "com.claudex.slug="+o.Slug, "--label", "com.claudex.mounts="+mountsLabel)
-	if o.PackID != "" {
+	if o.BundleID != "" {
 		volumeNames := make([]string, 0, len(o.VolumeNames))
 		for _, name := range o.VolumeNames {
 			volumeNames = append(volumeNames, name)
 		}
 		sort.Strings(volumeNames)
 		b, _ := json.Marshal(volumeNames)
-		args = append(args, "--label", "com.claudex.pack="+o.PackID, "--label", "com.claudex.pack-volumes="+string(b))
+		args = append(args, "--label", BundleLabel+"="+o.BundleID, "--label", BundleVolumesLabel+"="+string(b))
 	}
 	// Image and a keepalive command to prevent immediate exit
 	// Use a very portable command
@@ -187,7 +193,7 @@ func Run(args []string, in io.Reader, out, errOut io.Writer, dx dockerx.Docker) 
 	return RunPrepared(o, in, out, errOut, dx)
 }
 
-// RunPrepared runs an already-configured session. Pack mode uses this entry
+// RunPrepared runs an already-configured session. Bundle mode uses this entry
 // point after validating and materializing bundle-specific resources.
 func RunPrepared(o Options, in io.Reader, out, errOut io.Writer, dx dockerx.Docker) error {
 	if o.Name == "" {
@@ -206,8 +212,8 @@ func RunPrepared(o Options, in io.Reader, out, errOut io.Writer, dx dockerx.Dock
 		return err
 	}
 	if !present {
-		if o.PackID != "" {
-			return fmt.Errorf("pack image %q is not loaded", image)
+		if o.BundleID != "" {
+			return fmt.Errorf("bundle image %q is not loaded", image)
 		}
 		fmt.Fprintln(out, "Building image 'claudex' (first run)...")
 		ctxDir, cleanup, err := buildctx.PrepareBuildContext()
@@ -222,8 +228,8 @@ func RunPrepared(o Options, in io.Reader, out, errOut io.Writer, dx dockerx.Dock
 
 	// Check existing container
 	exists, running, info, _ := containers.Exists(dx, o.Name)
-	if exists && o.PackID != "" {
-		if err := validatePackContainer(info, o); err != nil {
+	if exists && o.BundleID != "" {
+		if err := validateBundleContainer(info, o); err != nil {
 			return err
 		}
 	}
@@ -362,11 +368,11 @@ func configMountArgs(options ...Options) []string {
 	for _, h := range harness.Registry() {
 		for _, m := range h.Mounts {
 			volume := m.Volume
-			if o.PackID != "" {
+			if o.BundleID != "" {
 				if mapped := o.VolumeNames[m.Volume]; mapped != "" {
 					volume = mapped
 				} else {
-					volume = PackVolumeName(o.PackID, m.Volume)
+					volume = BundleVolumeName(o.BundleID, m.Volume)
 				}
 			}
 			args = append(args, "-v", volume+":"+m.Container)
@@ -398,18 +404,18 @@ func prepareConfigVolumes(dx dockerx.Docker, options ...Options) ([]harness.Moun
 	for _, h := range harness.Registry() {
 		for _, m := range h.Mounts {
 			volume := m.Volume
-			if o.PackID != "" {
+			if o.BundleID != "" {
 				if mapped := o.VolumeNames[m.Volume]; mapped != "" {
 					volume = mapped
 				} else {
-					volume = PackVolumeName(o.PackID, m.Volume)
+					volume = BundleVolumeName(o.BundleID, m.Volume)
 				}
 			}
 			created, err := dx.VolumeCreate(volume)
 			if err != nil {
 				return nil, err
 			}
-			if !created || o.PackID != "" {
+			if !created || o.BundleID != "" {
 				continue
 			}
 			hp := m.HostPath()
@@ -425,15 +431,15 @@ func prepareConfigVolumes(dx dockerx.Docker, options ...Options) ([]harness.Moun
 	return seeds, nil
 }
 
-func validatePackContainer(info *dockerx.Container, o Options) error {
-	if info == nil || info.Labels["com.claudex.pack"] != o.PackID {
-		return fmt.Errorf("container name %s is not owned by bundle %s; refusing to reuse or replace it", o.Name, o.PackID)
+func validateBundleContainer(info *dockerx.Container, o Options) error {
+	if info == nil || info.Labels[BundleLabel] != o.BundleID {
+		return fmt.Errorf("container name %s is not owned by bundle %s; refusing to reuse or replace it", o.Name, o.BundleID)
 	}
 	if info.Image != o.Image {
-		return fmt.Errorf("pack container %s uses image %q, expected %q", o.Name, info.Image, o.Image)
+		return fmt.Errorf("bundle container %s uses image %q, expected %q", o.Name, info.Image, o.Image)
 	}
-	if info.ImageID != o.PackImageID {
-		return fmt.Errorf("pack container %s uses image ID %q, expected %q", o.Name, info.ImageID, o.PackImageID)
+	if info.ImageID != o.BundleImageID {
+		return fmt.Errorf("bundle container %s uses image ID %q, expected %q", o.Name, info.ImageID, o.BundleImageID)
 	}
 	expected := make(map[string]bool, len(o.VolumeNames))
 	for _, volume := range o.VolumeNames {
@@ -444,11 +450,11 @@ func validatePackContainer(info *dockerx.Container, o Options) error {
 		actual[volume] = true
 	}
 	if len(expected) != len(actual) {
-		return fmt.Errorf("pack container %s has unexpected volume mounts; refusing to reuse or replace it", o.Name)
+		return fmt.Errorf("bundle container %s has unexpected volume mounts; refusing to reuse or replace it", o.Name)
 	}
 	for volume := range expected {
 		if !actual[volume] {
-			return fmt.Errorf("pack container %s is missing expected volume %s; refusing to reuse or replace it", o.Name, volume)
+			return fmt.Errorf("bundle container %s is missing expected volume %s; refusing to reuse or replace it", o.Name, volume)
 		}
 	}
 	return nil

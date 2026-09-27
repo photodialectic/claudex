@@ -2,7 +2,6 @@ package commands
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/photodialectic/claudex/internal/dockerx"
 )
@@ -48,39 +47,4 @@ Run 'claudex bundle <command> --help' for command options.`)
 	default:
 		return fmt.Errorf("unknown bundle command %q (use 'claudex bundle --help')", args[0])
 	}
-}
-
-func bundleDestroy(args []string, dx dockerx.Docker) error {
-	bundleDir := ""
-	noVerify := false
-	for i := 0; i < len(args); i++ {
-		switch args[i] {
-		case "--no-verify":
-			noVerify = true
-		case "-h", "--help":
-			fmt.Println("Usage: claudex bundle destroy <bundle> [--no-verify]")
-			return nil
-		default:
-			if strings.HasPrefix(args[i], "-") {
-				return fmt.Errorf("unknown bundle destroy option %q", args[i])
-			}
-			if bundleDir != "" {
-				return fmt.Errorf("unexpected argument %q", args[i])
-			}
-			bundleDir = args[i]
-		}
-	}
-	if bundleDir == "" {
-		return fmt.Errorf("usage: claudex bundle destroy <bundle> [--no-verify]")
-	}
-	manifest, err := readManifest(bundleDir)
-	if err != nil {
-		return fmt.Errorf("read bundle: %w", err)
-	}
-	if !noVerify {
-		if err := verifyBundle(bundleDir, manifest); err != nil {
-			return err
-		}
-	}
-	return destroyBundleResources(dx, manifest)
 }

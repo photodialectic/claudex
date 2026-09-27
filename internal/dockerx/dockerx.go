@@ -73,12 +73,7 @@ func dockerOutput(args ...string) ([]byte, error) {
 	return cmd.CombinedOutput()
 }
 
-func (CLI) Run(args ...string) error {
-	cmd := exec.Command("docker", args...)
-	cmd.Stdout = bytes.NewBuffer(nil)
-	cmd.Stderr = bytes.NewBuffer(nil)
-	return cmd.Run()
-}
+func (CLI) Run(args ...string) error { return runDocker(args...) }
 
 func (CLI) Exec(args ...string) error { return (&CLI{}).Run(append([]string{"exec"}, args...)...) }
 
@@ -88,7 +83,7 @@ func runDocker(args ...string) error {
 	cmd := exec.Command("docker", args...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("docker %s: %v: %s", strings.Join(args, " "), err, string(out))
+		return fmt.Errorf("docker %s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(string(out)))
 	}
 	return nil
 }

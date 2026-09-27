@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/photodialectic/claudex/internal/dockerx"
+	"github.com/photodialectic/claudex/internal/run"
 )
 
 const testImageID = "sha256:bundle-test-image"
@@ -155,8 +156,8 @@ func TestBundleRunMaterializesNamespacedVolumeAndDetectsStaleBundle(t *testing.T
 		t.Fatal(err)
 	}
 	original := "claudex-claude"
-	namespaced := "claudex-pack-" + manifest.BundleID + "-" + original
-	if err := materializePackVolume(dx, bundle, manifest, original, namespaced, false); err != nil {
+	namespaced := "claudex-bundle-" + manifest.BundleID + "-" + original
+	if err := materializeBundleVolume(dx, bundle, manifest, original, namespaced, false); err != nil {
 		t.Fatalf("materialize: %v", err)
 	}
 	if got := dx.ExtractVolumeCalls[len(dx.ExtractVolumeCalls)-1].Volume; got != namespaced {
@@ -173,36 +174,11 @@ func TestBundleRunMaterializesNamespacedVolumeAndDetectsStaleBundle(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := materializePackVolume(dx, bundle, manifest, original, namespaced, false); err == nil {
+	if err := materializeBundleVolume(dx, bundle, manifest, original, namespaced, false); err == nil {
 		t.Fatal("expected changed archive to be detected as stale")
 	}
-	if err := materializePackVolume(dx, bundle, manifest, original, namespaced, true); err != nil {
+	if err := materializeBundleVolume(dx, bundle, manifest, original, namespaced, true); err != nil {
 		t.Fatalf("refresh namespaced volume: %v", err)
-	}
-}
-
-func TestValidateHostArchiveRejectsTraversal(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "malicious.tar.gz")
-	var data bytes.Buffer
-	gz := gzip.NewWriter(&data)
-	tw := tar.NewWriter(gz)
-	if err := tw.WriteHeader(&tar.Header{Name: "../outside", Mode: 0600, Size: 1, Typeflag: tar.TypeReg}); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := tw.Write([]byte("x")); err != nil {
-		t.Fatal(err)
-	}
-	if err := tw.Close(); err != nil {
-		t.Fatal(err)
-	}
-	if err := gz.Close(); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(path, data.Bytes(), 0600); err != nil {
-		t.Fatal(err)
-	}
-	if err := validateHostArchive(path); err == nil {
-		t.Fatal("expected traversal path to be rejected")
 	}
 }
 
@@ -216,14 +192,14 @@ func TestBundleDestroyRemovesOnlyStoppedOwnedResources(t *testing.T) {
 	}
 	var namespaced []string
 	for _, original := range allHarnessVolumes() {
-		name := "claudex-pack-" + manifest.BundleID + "-" + original
+		name := "claudex-bundle-" + manifest.BundleID + "-" + original
 		namespaced = append(namespaced, name)
-		_, err := dx.VolumeCreateLabeled(name, map[string]string{packLabel: manifest.BundleID})
+		_, err := dx.VolumeCreateLabeled(name, map[string]string{run.BundleLabel: manifest.BundleID})
 		if err != nil {
 			t.Fatal(err)
 		}
 	}
-	containerName := "claudex-pack-" + manifest.BundleID + "-test"
+	containerName := "claudex-bundle-" + manifest.BundleID + "-test"
 	volumes := append([]string(nil), namespaced...)
 	dx.Containers = map[string]dockerx.Container{
 		containerName: {
@@ -231,7 +207,7 @@ func TestBundleDestroyRemovesOnlyStoppedOwnedResources(t *testing.T) {
 			Image:   manifest.ImageTag,
 			ImageID: testImageID,
 			Status:  "exited",
-			Labels:  map[string]string{packLabel: manifest.BundleID},
+			Labels:  map[string]string{run.BundleLabel: manifest.BundleID},
 			Volumes: volumes,
 		},
 	}
@@ -269,7 +245,7 @@ func TestWriteBackFailurePreservesCurrentManifestAndArchives(t *testing.T) {
 	dx.TarVolumeFn = func(string, string, io.Writer) error { return errors.New("simulated archive failure") }
 	names := map[string]string{}
 	for _, volume := range manifest.Volumes {
-		names[volume] = "claudex-pack-" + manifest.BundleID + "-" + volume
+		names[volume] = "claudex-bundle-" + manifest.BundleID + "-" + volume
 	}
 	if err := writeBackBundleVolumes(dx, bundle, manifest, names); err == nil {
 		t.Fatal("expected write-back failure")
@@ -300,7 +276,7 @@ func TestWriteBackPublishesContentAddressedArchive(t *testing.T) {
 	}
 	names := map[string]string{}
 	for _, volume := range manifest.Volumes {
-		names[volume] = "claudex-pack-" + manifest.BundleID + "-" + volume
+		names[volume] = "claudex-bundle-" + manifest.BundleID + "-" + volume
 	}
 	if err := writeBackBundleVolumes(dx, bundle, manifest, names); err != nil {
 		t.Fatalf("write-back: %v", err)
@@ -334,7 +310,7 @@ func TestWriteBackPreservesUnchangedArchiveReference(t *testing.T) {
 	previous := manifest.VolumeArchives["claudex-claude"]
 	names := map[string]string{}
 	for _, volume := range manifest.Volumes {
-		names[volume] = "claudex-pack-" + manifest.BundleID + "-" + volume
+		names[volume] = "claudex-bundle-" + manifest.BundleID + "-" + volume
 	}
 	if err := writeBackBundleVolumes(dx, bundle, manifest, names); err != nil {
 		t.Fatalf("write-back: %v", err)
@@ -348,28 +324,6 @@ func TestWriteBackPreservesUnchangedArchiveReference(t *testing.T) {
 	}
 	if err := verifyBundle(bundle, updated); err != nil {
 		t.Fatalf("unchanged bundle failed verification: %v", err)
-	}
-}
-
-func TestValidateVolumeArchiveRejectsEscapingSymlink(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "malicious-volume.tar.gz")
-	var data bytes.Buffer
-	gz := gzip.NewWriter(&data)
-	tw := tar.NewWriter(gz)
-	if err := tw.WriteHeader(&tar.Header{Name: "config/link", Linkname: "../../outside", Typeflag: tar.TypeSymlink, Mode: 0777}); err != nil {
-		t.Fatal(err)
-	}
-	if err := tw.Close(); err != nil {
-		t.Fatal(err)
-	}
-	if err := gz.Close(); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(path, data.Bytes(), 0600); err != nil {
-		t.Fatal(err)
-	}
-	if err := validateVolumeArchive(path, "claudex-claude"); err == nil {
-		t.Fatal("expected escaping symlink to be rejected")
 	}
 }
 

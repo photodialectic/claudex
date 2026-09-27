@@ -236,9 +236,9 @@ claudex bundle destroy /Volumes/CLAUDEX/claudex-bundle
 `bundle run` uses a random persistent bundle ID to namespace its Docker image tag,
 volumes, and containers. It rejects stale local copies after the bundle changes;
 use `--refresh` to replace them (local changes in those volumes are discarded).
-`--write-back` saves the pack volumes to the bundle after the interactive shell
+`--write-back` saves the bundle volumes to the bundle after the interactive shell
 exits, after stopping that bundle session container. `bundle destroy` removes stopped,
-bundle-owned session containers and only pack-labeled volumes; it refuses to
+bundle-owned session containers and only bundle-labeled volumes; it refuses to
 remove running sessions or volumes still in use. The bundle's
 `claudex-claudex` volume is its runtime state; the separate host-config archive
 is only an explicit restore snapshot. Destroying removes the local runtime

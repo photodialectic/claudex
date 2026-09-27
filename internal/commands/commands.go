@@ -13,6 +13,7 @@ import (
 	"github.com/photodialectic/claudex/internal/buildctx"
 	"github.com/photodialectic/claudex/internal/containers"
 	"github.com/photodialectic/claudex/internal/dockerx"
+	"github.com/photodialectic/claudex/internal/run"
 	"github.com/photodialectic/claudex/internal/ui"
 )
 
@@ -125,7 +126,7 @@ func List(args []string) error {
 				continue
 			}
 		}
-		if v, ok := filters["pack"]; ok && c.Labels["com.claudex.pack"] != v {
+		if v, ok := filters["bundle"]; ok && c.Labels[run.BundleLabel] != v {
 			continue
 		}
 		outList = append(outList, c)
