@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -71,5 +72,33 @@ func TestArchiveVolumesStopsSchedulingAfterFatalError(t *testing.T) {
 	}
 	if len(archived) != 1 || archived[0] != volumes[0] {
 		t.Fatalf("exports continued after fatal error: %v", archived)
+	}
+}
+
+func TestCrossCompileEnvOverridesToolchainVars(t *testing.T) {
+	t.Setenv("GOOS", "linux")
+	t.Setenv("GOARCH", "amd64")
+	t.Setenv("CGO_ENABLED", "1")
+	t.Setenv("CLAUDEX_TEST_PASSTHROUGH", "keep")
+	env := crossCompileEnv("darwin", "arm64")
+	goos, goarch, cgo := "", "", ""
+	passthrough := false
+	for _, entry := range env {
+		switch {
+		case strings.HasPrefix(entry, "GOOS="):
+			goos = entry
+		case strings.HasPrefix(entry, "GOARCH="):
+			goarch = entry
+		case strings.HasPrefix(entry, "CGO_ENABLED="):
+			cgo = entry
+		case entry == "CLAUDEX_TEST_PASSTHROUGH=keep":
+			passthrough = true
+		}
+	}
+	if goos != "GOOS=darwin" || goarch != "GOARCH=arm64" || cgo != "CGO_ENABLED=0" {
+		t.Fatalf("toolchain variables not overridden: %v", env)
+	}
+	if !passthrough {
+		t.Fatalf("unrelated environment variables were dropped: %v", env)
 	}
 }

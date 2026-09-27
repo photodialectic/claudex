@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/photodialectic/claudex/internal/dockerx"
@@ -340,4 +341,54 @@ func writeTestVolumeTar(dst io.Writer, content []byte) error {
 		return err
 	}
 	return gz.Close()
+}
+
+func TestBundleDestroyRefusesWhileSessionRunning(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	dx := newBundleTestDocker()
+	bundle := createTestBundle(t, dx)
+	manifest, err := readManifest(bundle)
+	if err != nil {
+		t.Fatal(err)
+	}
+	containerName := "claudex-bundle-" + manifest.BundleID + "-session"
+	dx.Containers = map[string]dockerx.Container{
+		containerName: {
+			Name:    containerName,
+			Image:   manifest.ImageTag,
+			ImageID: testImageID,
+			Status:  "running",
+			Labels:  map[string]string{run.BundleLabel: manifest.BundleID},
+		},
+	}
+	dx.PSNames = []string{containerName}
+	err = bundleDestroy([]string{bundle}, dx)
+	if err == nil {
+		t.Fatal("expected destroy to refuse while a bundle session is running")
+	}
+	if !strings.Contains(err.Error(), "is running") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(dx.RemoveCalls) != 0 {
+		t.Fatalf("running session container was removed: %+v", dx.RemoveCalls)
+	}
+	if len(dx.VolumeRemoveCalls) != 0 {
+		t.Fatalf("bundle volumes were removed while a session was running: %v", dx.VolumeRemoveCalls)
+	}
+}
+
+func TestBundleDispatchHelpAndUnknownCommand(t *testing.T) {
+	if err := Bundle(nil); err != nil {
+		t.Fatalf("bundle usage: %v", err)
+	}
+	if err := Bundle([]string{"run", "--help"}); err != nil {
+		t.Fatalf("run help: %v", err)
+	}
+	err := Bundle([]string{"explode"})
+	if err == nil {
+		t.Fatal("expected an unknown bundle command error")
+	}
+	if !strings.Contains(err.Error(), "unknown bundle command") {
+		t.Fatalf("unexpected error: %v", err)
+	}
 }

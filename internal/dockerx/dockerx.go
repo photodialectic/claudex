@@ -68,8 +68,11 @@ type Container struct {
 // CLI implements Docker using the local docker CLI.
 type CLI struct{}
 
+// execCommand is a seam for tests to substitute a stub docker command.
+var execCommand = exec.Command
+
 func dockerOutput(args ...string) ([]byte, error) {
-	cmd := exec.Command("docker", args...)
+	cmd := execCommand("docker", args...)
 	return cmd.CombinedOutput()
 }
 
@@ -80,7 +83,7 @@ func (CLI) Exec(args ...string) error { return (&CLI{}).Run(append([]string{"exe
 func (CLI) CP(src, dst string) error { return (&CLI{}).Run("cp", src, dst) }
 
 func runDocker(args ...string) error {
-	cmd := exec.Command("docker", args...)
+	cmd := execCommand("docker", args...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("docker %s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(string(out)))
