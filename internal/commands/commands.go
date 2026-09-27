@@ -125,6 +125,9 @@ func List(args []string) error {
 				continue
 			}
 		}
+		if v, ok := filters["pack"]; ok && c.Labels["com.claudex.pack"] != v {
+			continue
+		}
 		outList = append(outList, c)
 	}
 

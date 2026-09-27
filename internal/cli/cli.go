@@ -40,6 +40,8 @@ func Execute(args []string) error {
 		return commands.Callback(args[1:])
 	case "harness":
 		return commands.Harness(args[1:])
+	case "bundle":
+		return commands.Bundle(args[1:])
 	case "-h", "--help", "help":
 		return usage()
 	default:
@@ -98,6 +100,13 @@ Manage harness config volumes:
   %s harness list
   %s harness push [<NAME> ...]
   %s harness pull [<NAME> ...]
+
+Portable bundles:
+  claudex bundle create <dest-dir> [--volumes <n1,n2>] [--jobs <1-16>] [--no-binaries] [--no-host-config] [--force]
+  claudex bundle run <bundle> [--refresh] [--write-back] [DIR...] [run-flags]
+  claudex bundle destroy <bundle> [--no-verify]
+  claudex bundle install <bundle> [--replace] [--volumes <n1,n2>] [--no-verify] [--with-host-config]
+  Bundle archives contain credentials and session history; keep them private.
 `, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog)
 	return nil
 }

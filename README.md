@@ -192,6 +192,68 @@ claudex harness update [<name> ...]  # Rebuild one or all tool image layers
 - `.claude.json` is merged on push: host-owned keys (`mcpServers`, `permissions`,
   `hooks`, etc.) are overlaid without clobbering `projects` session history.
 
+### Portable bundles (experimental)
+
+Create a portable archive of the Claudex image and selected harness volumes:
+
+```bash
+claudex bundle create /Volumes/CLAUDEX/claudex-bundle
+claudex bundle create /Volumes/CLAUDEX/claudex-bundle --jobs 4 --no-binaries --volumes claudex-claude,claudex-codex
+```
+
+By default, `bundle create` includes cross-compiled CLI binaries for macOS and Linux on
+amd64 and arm64, plus `~/.claudex` as an optional host-config snapshot. Use
+`--no-binaries` or `--no-host-config` to omit them. `--volumes` accepts Docker
+volume names from the harness registry. A partial bundle can be selectively
+installed, but `bundle run` requires a complete set of registry volumes. Refreshing
+an existing bundle keeps its persistent bundle identity. Volume archives are
+exported concurrently (2 workers by default); use `--jobs 1` for slow drives or
+up to `--jobs 16` for faster storage. Large transfers show a terminal progress
+bar, or byte milestones when output is redirected.
+
+Import a bundle into the host's ordinary Claudex image and volumes:
+
+```bash
+claudex bundle install /Volumes/CLAUDEX/claudex-bundle
+claudex bundle install /Volumes/CLAUDEX/claudex-bundle --volumes claudex-claude --replace
+claudex bundle install /Volumes/CLAUDEX/claudex-bundle --with-host-config
+```
+
+Existing volumes are skipped unless `--replace` is specified. Host config is
+never restored automatically; restoration refuses to overwrite `~/.claudex`
+unless `--replace` is passed. Do not use `bundle install --replace` while a container is
+using one of the target volumes.
+
+Run from a bundle without replacing Claudex's regular image or volumes:
+
+```bash
+/Volumes/CLAUDEX/claudex-bundle/bin/claudex-darwin-arm64 \
+  bundle run /Volumes/CLAUDEX/claudex-bundle ~/some-project
+claudex bundle run /Volumes/CLAUDEX/claudex-bundle --write-back ~/some-project
+claudex bundle destroy /Volumes/CLAUDEX/claudex-bundle
+```
+
+`bundle run` uses a random persistent bundle ID to namespace its Docker image tag,
+volumes, and containers. It rejects stale local copies after the bundle changes;
+use `--refresh` to replace them (local changes in those volumes are discarded).
+`--write-back` saves the pack volumes to the bundle after the interactive shell
+exits, after stopping that bundle session container. `bundle destroy` removes stopped,
+bundle-owned session containers and only pack-labeled volumes; it refuses to
+remove running sessions or volumes still in use. The bundle's
+`claudex-claudex` volume is its runtime state; the separate host-config archive
+is only an explicit restore snapshot. Destroying removes the local runtime
+volumes, so session changes not previously saved with `--write-back` are lost;
+the bundle files on the drive are not deleted.
+
+Bundle files may contain API tokens, credentials, and agent history. Keep the
+bundle private and only import bundles from sources you trust: SHA-256 checks
+detect corruption but do not authenticate who created a bundle. `bundle run` does
+not mount the host Docker socket and does not seed from host dotfiles; the normal
+harness API-key environment variables that are set on the host are still
+forwarded to the session. Workspace directories and an explicitly supplied CA
+certificate are host mounts by design. The image is arm64-only at present, so
+install/run fail on an unsupported Docker server architecture.
+
 ### Adding a Harness
 
 Harness definitions live in `internal/harness/harnesses.yaml` (embedded into
@@ -617,4 +679,3 @@ mkdir -p ~/.local/share/opencode
   }
 }
 ```
-

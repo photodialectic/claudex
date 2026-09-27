@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"time"
 
 	"github.com/photodialectic/claudex/internal/buildctx"
@@ -26,6 +27,10 @@ type Options struct {
 	Firewall       bool
 	CACertFile     string
 	Workdirs       []string
+	PackID         string
+	Image          string
+	PackImageID    string
+	VolumeNames    map[string]string
 
 	// Derived
 	Normalized []string
@@ -93,8 +98,20 @@ func (o *Options) Derive() error {
 		name = fmt.Sprintf("%s-%d", name, time.Now().Unix())
 	}
 	o.Name = name
+	if o.PackID != "" {
+		o.Name = "claudex-pack-" + o.PackID + "-" + o.Name
+	}
 	return nil
 }
+
+// PackVolumeName returns the Docker volume name reserved for one bundle's copy
+// of a harness volume.
+func PackVolumeName(packID, original string) string {
+	return "claudex-pack-" + packID + "-" + original
+}
+
+// PackImageTag returns the private image tag used by one bundle.
+func PackImageTag(packID string) string { return "claudex-pack:" + packID }
 
 // BuildRunArgs builds docker run args array based on options and env.
 func (o Options) BuildRunArgs() ([]string, error) {
@@ -110,12 +127,14 @@ func (o Options) BuildRunArgs() ([]string, error) {
 	}
 
 	// docker sock mount if present
-	if _, err := os.Stat("/var/run/docker.sock"); err == nil {
-		args = append(args, "-v", "/var/run/docker.sock:/var/run/docker.sock")
+	if o.PackID == "" {
+		if _, err := os.Stat("/var/run/docker.sock"); err == nil {
+			args = append(args, "-v", "/var/run/docker.sock:/var/run/docker.sock")
+		}
 	}
 
 	// harness config volumes
-	args = append(args, configMountArgs()...)
+	args = append(args, configMountArgs(o)...)
 
 	if o.CACertFile != "" {
 		abs, err := filepath.Abs(o.CACertFile)
@@ -137,9 +156,22 @@ func (o Options) BuildRunArgs() ([]string, error) {
 	b, _ := json.Marshal(o.Normalized)
 	mountsLabel := string(b)
 	args = append(args, "--label", "com.claudex.signature="+o.Signature, "--label", "com.claudex.version="+version.Version, "--label", "com.claudex.slug="+o.Slug, "--label", "com.claudex.mounts="+mountsLabel)
+	if o.PackID != "" {
+		volumeNames := make([]string, 0, len(o.VolumeNames))
+		for _, name := range o.VolumeNames {
+			volumeNames = append(volumeNames, name)
+		}
+		sort.Strings(volumeNames)
+		b, _ := json.Marshal(volumeNames)
+		args = append(args, "--label", "com.claudex.pack="+o.PackID, "--label", "com.claudex.pack-volumes="+string(b))
+	}
 	// Image and a keepalive command to prevent immediate exit
 	// Use a very portable command
-	args = append(args, "claudex", "tail", "-f", "/dev/null")
+	image := o.Image
+	if image == "" {
+		image = "claudex"
+	}
+	args = append(args, image, "tail", "-f", "/dev/null")
 	return args, nil
 }
 
@@ -152,13 +184,31 @@ func Run(args []string, in io.Reader, out, errOut io.Writer, dx dockerx.Docker) 
 	if err := o.Derive(); err != nil {
 		return err
 	}
+	return RunPrepared(o, in, out, errOut, dx)
+}
+
+// RunPrepared runs an already-configured session. Pack mode uses this entry
+// point after validating and materializing bundle-specific resources.
+func RunPrepared(o Options, in io.Reader, out, errOut io.Writer, dx dockerx.Docker) error {
+	if o.Name == "" {
+		if err := o.Derive(); err != nil {
+			return err
+		}
+	}
 	// Ensure image exists, build if missing using embedded context
-	fmt.Fprintln(out, "Ensuring image 'claudex' exists...")
-	present, err := dx.ImageExists("claudex")
+	image := o.Image
+	if image == "" {
+		image = "claudex"
+	}
+	fmt.Fprintf(out, "Ensuring image %q exists...\n", image)
+	present, err := dx.ImageExists(image)
 	if err != nil {
 		return err
 	}
 	if !present {
+		if o.PackID != "" {
+			return fmt.Errorf("pack image %q is not loaded", image)
+		}
 		fmt.Fprintln(out, "Building image 'claudex' (first run)...")
 		ctxDir, cleanup, err := buildctx.PrepareBuildContext()
 		if err != nil {
@@ -172,6 +222,11 @@ func Run(args []string, in io.Reader, out, errOut io.Writer, dx dockerx.Docker) 
 
 	// Check existing container
 	exists, running, info, _ := containers.Exists(dx, o.Name)
+	if exists && o.PackID != "" {
+		if err := validatePackContainer(info, o); err != nil {
+			return err
+		}
+	}
 	if exists && !o.ForceReplace {
 		fmt.Fprintf(out, "Reusing container %s\n", o.Name)
 		if o.StrictMounts {
@@ -217,7 +272,7 @@ func Run(args []string, in io.Reader, out, errOut io.Writer, dx dockerx.Docker) 
 
 func createAndAttach(o Options, in io.Reader, out, errOut io.Writer, dx dockerx.Docker) error {
 	fmt.Fprintf(out, "Creating container %s...\n", o.Name)
-	seeds, err := prepareConfigVolumes(dx)
+	seeds, err := prepareConfigVolumes(dx, o)
 	if err != nil {
 		return err
 	}
@@ -298,11 +353,23 @@ func waitRunning(dx dockerx.Docker, name string, timeout time.Duration) bool {
 }
 
 // configMountArgs returns the -v mount arguments for every harness volume.
-func configMountArgs() []string {
+func configMountArgs(options ...Options) []string {
+	var o Options
+	if len(options) > 0 {
+		o = options[0]
+	}
 	var args []string
 	for _, h := range harness.Registry() {
 		for _, m := range h.Mounts {
-			args = append(args, "-v", m.Volume+":"+m.Container)
+			volume := m.Volume
+			if o.PackID != "" {
+				if mapped := o.VolumeNames[m.Volume]; mapped != "" {
+					volume = mapped
+				} else {
+					volume = PackVolumeName(o.PackID, m.Volume)
+				}
+			}
+			args = append(args, "-v", volume+":"+m.Container)
 		}
 	}
 	return args
@@ -322,15 +389,27 @@ func configEnvArgs() []string {
 // prepareConfigVolumes ensures every harness volume exists and returns the
 // mounts whose volumes were newly created and therefore need seeding from the
 // host (when a matching host path exists).
-func prepareConfigVolumes(dx dockerx.Docker) ([]harness.Mount, error) {
+func prepareConfigVolumes(dx dockerx.Docker, options ...Options) ([]harness.Mount, error) {
+	var o Options
+	if len(options) > 0 {
+		o = options[0]
+	}
 	var seeds []harness.Mount
 	for _, h := range harness.Registry() {
 		for _, m := range h.Mounts {
-			created, err := dx.VolumeCreate(m.Volume)
+			volume := m.Volume
+			if o.PackID != "" {
+				if mapped := o.VolumeNames[m.Volume]; mapped != "" {
+					volume = mapped
+				} else {
+					volume = PackVolumeName(o.PackID, m.Volume)
+				}
+			}
+			created, err := dx.VolumeCreate(volume)
 			if err != nil {
 				return nil, err
 			}
-			if !created {
+			if !created || o.PackID != "" {
 				continue
 			}
 			hp := m.HostPath()
@@ -344,6 +423,35 @@ func prepareConfigVolumes(dx dockerx.Docker) ([]harness.Mount, error) {
 		}
 	}
 	return seeds, nil
+}
+
+func validatePackContainer(info *dockerx.Container, o Options) error {
+	if info == nil || info.Labels["com.claudex.pack"] != o.PackID {
+		return fmt.Errorf("container name %s is not owned by bundle %s; refusing to reuse or replace it", o.Name, o.PackID)
+	}
+	if info.Image != o.Image {
+		return fmt.Errorf("pack container %s uses image %q, expected %q", o.Name, info.Image, o.Image)
+	}
+	if info.ImageID != o.PackImageID {
+		return fmt.Errorf("pack container %s uses image ID %q, expected %q", o.Name, info.ImageID, o.PackImageID)
+	}
+	expected := make(map[string]bool, len(o.VolumeNames))
+	for _, volume := range o.VolumeNames {
+		expected[volume] = true
+	}
+	actual := make(map[string]bool, len(info.Volumes))
+	for _, volume := range info.Volumes {
+		actual[volume] = true
+	}
+	if len(expected) != len(actual) {
+		return fmt.Errorf("pack container %s has unexpected volume mounts; refusing to reuse or replace it", o.Name)
+	}
+	for volume := range expected {
+		if !actual[volume] {
+			return fmt.Errorf("pack container %s is missing expected volume %s; refusing to reuse or replace it", o.Name, volume)
+		}
+	}
+	return nil
 }
 
 // seedVolumes copies host config into freshly created (empty) volumes.

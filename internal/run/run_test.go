@@ -3,6 +3,7 @@ package run
 import (
 	"bytes"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/photodialectic/claudex/internal/dockerx"
@@ -25,6 +26,64 @@ func TestParseArgsAndDerive(t *testing.T) {
 	}
 	if o.Name == "" || o.Signature == "" || o.Slug == "" || len(o.Normalized) == 0 {
 		t.Fatalf("missing derived fields: %+v", o)
+	}
+}
+
+func TestBundleRunNamespacesImageVolumesAndOverrideName(t *testing.T) {
+	o, err := ParseArgs([]string{"--name", "project", "--replace", "."})
+	if err != nil {
+		t.Fatal(err)
+	}
+	o.PackID = "0123456789abcdef0123456789abcdef"
+	o.Image = PackImageTag(o.PackID)
+	o.PackImageID = "sha256:test"
+	o.VolumeNames = map[string]string{"claudex-claude": PackVolumeName(o.PackID, "claudex-claude")}
+	if err := o.Derive(); err != nil {
+		t.Fatal(err)
+	}
+	if o.Name != "claudex-pack-"+o.PackID+"-project" {
+		t.Fatalf("container override not isolated: %q", o.Name)
+	}
+	args, err := o.BuildRunArgs()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !contains(args, PackVolumeName(o.PackID, "claudex-claude")+":/home/node/.claude") {
+		t.Fatalf("missing namespaced volume: %v", args)
+	}
+	if !contains(args, "com.claudex.pack="+o.PackID) || !contains(args, o.Image) {
+		t.Fatalf("missing pack identity/image: %v", args)
+	}
+	if contains(args, "/var/run/docker.sock:/var/run/docker.sock") {
+		t.Fatalf("bundle run must not expose the host Docker socket: %v", args)
+	}
+	for _, arg := range configMountArgs(o) {
+		if strings.Contains(arg, "claudex-claude:") && !strings.Contains(arg, PackVolumeName(o.PackID, "claudex-claude")) {
+			t.Fatalf("ordinary claudex volume leaked into pack mounts: %v", arg)
+		}
+	}
+}
+
+func TestBundleContainerOwnershipValidation(t *testing.T) {
+	o := Options{
+		PackID:      "bundle-id",
+		Image:       "claudex-pack:bundle-id",
+		PackImageID: "sha256:expected",
+		VolumeNames: map[string]string{"claudex-claude": "claudex-pack-bundle-id-claudex-claude"},
+		Name:        "claudex-pack-bundle-id-test",
+	}
+	valid := &dockerx.Container{
+		Image:   o.Image,
+		ImageID: o.PackImageID,
+		Labels:  map[string]string{"com.claudex.pack": o.PackID},
+		Volumes: []string{"claudex-pack-bundle-id-claudex-claude"},
+	}
+	if err := validatePackContainer(valid, o); err != nil {
+		t.Fatalf("valid pack container rejected: %v", err)
+	}
+	valid.Labels["com.claudex.pack"] = "another-bundle"
+	if err := validatePackContainer(valid, o); err == nil {
+		t.Fatal("container owned by another bundle was accepted")
 	}
 }
 
