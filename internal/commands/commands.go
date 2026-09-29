@@ -13,6 +13,7 @@ import (
 	"github.com/photodialectic/claudex/internal/buildctx"
 	"github.com/photodialectic/claudex/internal/containers"
 	"github.com/photodialectic/claudex/internal/dockerx"
+	"github.com/photodialectic/claudex/internal/run"
 	"github.com/photodialectic/claudex/internal/ui"
 )
 
@@ -96,36 +97,9 @@ func List(args []string) error {
 		cons = tmp
 	}
 
-	var outList []dockerx.Container
-	for _, c := range cons {
-		if v, ok := filters["name"]; ok {
-			if v == "" {
-				continue
-			}
-			okm, err := filepath.Match(v, c.Name)
-			if err != nil {
-				return fmt.Errorf("invalid --filter name pattern %q: %v", v, err)
-			}
-			if !okm {
-				continue
-			}
-		}
-		if v, ok := filters["signature"]; ok && c.Labels["com.claudex.signature"] != v {
-			continue
-		}
-		if v, ok := filters["slug"]; ok {
-			if v == "" {
-				continue
-			}
-			okm, err := filepath.Match(v, c.Labels["com.claudex.slug"])
-			if err != nil {
-				return fmt.Errorf("invalid --filter slug pattern %q: %v", v, err)
-			}
-			if !okm {
-				continue
-			}
-		}
-		outList = append(outList, c)
+	outList, err := filterContainers(cons, filters)
+	if err != nil {
+		return err
 	}
 
 	switch format {
@@ -162,6 +136,46 @@ func List(args []string) error {
 		}
 		return nil
 	}
+}
+
+// filterContainers applies `claudex list --filter` predicates. Supported
+// keys are name, signature, slug, and bundle.
+func filterContainers(cons []dockerx.Container, filters map[string]string) ([]dockerx.Container, error) {
+	var out []dockerx.Container
+	for _, c := range cons {
+		if v, ok := filters["name"]; ok {
+			if v == "" {
+				continue
+			}
+			okm, err := filepath.Match(v, c.Name)
+			if err != nil {
+				return nil, fmt.Errorf("invalid --filter name pattern %q: %v", v, err)
+			}
+			if !okm {
+				continue
+			}
+		}
+		if v, ok := filters["signature"]; ok && c.Labels["com.claudex.signature"] != v {
+			continue
+		}
+		if v, ok := filters["slug"]; ok {
+			if v == "" {
+				continue
+			}
+			okm, err := filepath.Match(v, c.Labels["com.claudex.slug"])
+			if err != nil {
+				return nil, fmt.Errorf("invalid --filter slug pattern %q: %v", v, err)
+			}
+			if !okm {
+				continue
+			}
+		}
+		if v, ok := filters["bundle"]; ok && c.Labels[run.BundleLabel] != v {
+			continue
+		}
+		out = append(out, c)
+	}
+	return out, nil
 }
 
 // Destroy removes claudex containers with safety prompt.

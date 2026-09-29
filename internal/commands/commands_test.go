@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/photodialectic/claudex/internal/dockerx"
+	"github.com/photodialectic/claudex/internal/run"
 )
 
 func TestPickRunning_ByNameAndStatus(t *testing.T) {
@@ -219,4 +220,53 @@ func containsStr(a []string, s string) bool {
 		}
 	}
 	return false
+}
+
+func TestFilterContainers(t *testing.T) {
+	cons := []dockerx.Container{
+		{Name: "claudex-bundle-aaa-project", Labels: map[string]string{run.BundleLabel: "aaa", "com.claudex.signature": "sig1", "com.claudex.slug": "project"}},
+		{Name: "claudex-project", Labels: map[string]string{"com.claudex.signature": "sig2", "com.claudex.slug": "project"}},
+		{Name: "claudex-bundle-bbb-project", Labels: map[string]string{run.BundleLabel: "bbb", "com.claudex.signature": "sig1"}},
+	}
+	cases := []struct {
+		name    string
+		filters map[string]string
+		want    []string
+		wantErr bool
+	}{
+		{"no filters keep all", nil, []string{"claudex-bundle-aaa-project", "claudex-project", "claudex-bundle-bbb-project"}, false},
+		{"bundle id", map[string]string{"bundle": "aaa"}, []string{"claudex-bundle-aaa-project"}, false},
+		{"bundle id without match", map[string]string{"bundle": "zzz"}, nil, false},
+		{"name glob", map[string]string{"name": "claudex-bundle-*"}, []string{"claudex-bundle-aaa-project", "claudex-bundle-bbb-project"}, false},
+		{"signature", map[string]string{"signature": "sig1"}, []string{"claudex-bundle-aaa-project", "claudex-bundle-bbb-project"}, false},
+		{"slug glob", map[string]string{"slug": "proj*"}, []string{"claudex-bundle-aaa-project", "claudex-project"}, false},
+		{"empty name filter drops all", map[string]string{"name": ""}, nil, false},
+		{"invalid name pattern", map[string]string{"name": "["}, nil, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := filterContainers(cons, tc.filters)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatal("expected an error")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("filter: %v", err)
+			}
+			var names []string
+			for _, c := range got {
+				names = append(names, c.Name)
+			}
+			if len(names) != len(tc.want) {
+				t.Fatalf("got %v, want %v", names, tc.want)
+			}
+			for i := range names {
+				if names[i] != tc.want[i] {
+					t.Fatalf("got %v, want %v", names, tc.want)
+				}
+			}
+		})
+	}
 }
