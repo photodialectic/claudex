@@ -153,10 +153,53 @@ func (o Options) BuildRunArgs() ([]string, error) {
 		args = append(args, "-v", fmt.Sprintf("%s:/usr/local/share/ca-certificates/claudex-custom.crt:ro", abs))
 	}
 
+	tmp, err := os.CreateTemp("", "claudex-empty-env-*")
+	if err != nil {
+		return nil, err
+	}
+	_ = tmp.Close()
+
 	// workspace mounts
 	for _, abs := range o.Normalized {
 		base := filepath.Base(abs)
+		// we need to be recursive here because the .env files may be in subdirectories of the workspace
 		args = append(args, "-v", fmt.Sprintf("%s:/workspace/%s", abs, base))
+
+		// hide secrets and distractions
+		envPattern := ".env*"
+		ignoreDirs := map[string]bool{
+			".git":         true,
+			"node_modules": true,
+		}
+		err = filepath.Walk(abs, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			if info.IsDir() {
+				if ignoreDirs[info.Name()] {
+					relDir, err := filepath.Rel(abs, path)
+					if err != nil {
+						return err
+					}
+					args = append(args, "-v", fmt.Sprintf("/workspace/%s/%s", base, relDir))
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			if matched, err := filepath.Match(envPattern, info.Name()); err != nil {
+				return err
+			} else if matched {
+				rel, err := filepath.Rel(abs, path)
+				if err != nil {
+					return err
+				}
+				args = append(args, "-v", fmt.Sprintf("%s:/workspace/%s/%s", tmp.Name(), base, rel))
+			}
+			return nil
+		})
+		if err != nil {
+			return nil, err
+		}
 	}
 	// labels
 	b, _ := json.Marshal(o.Normalized)
