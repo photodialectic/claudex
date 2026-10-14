@@ -4,9 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/photodialectic/claudex/internal/buildctx"
@@ -153,10 +155,62 @@ func (o Options) BuildRunArgs() ([]string, error) {
 		args = append(args, "-v", fmt.Sprintf("%s:/usr/local/share/ca-certificates/claudex-custom.crt:ro", abs))
 	}
 
+	var shadow string
 	// workspace mounts
 	for _, abs := range o.Normalized {
 		base := filepath.Base(abs)
 		args = append(args, "-v", fmt.Sprintf("%s:/workspace/%s", abs, base))
+
+		// Shadow-mount over sensitive or noisy paths: .env* files may hold
+		// secrets and .git / node_modules are host state the agent should not
+		// touch, so both end up under an empty mount. The walk is recursive
+		// because .env files may live in any subdirectory of the workspace.
+		var envRels, dirRels []string
+		err := filepath.WalkDir(abs, func(path string, d fs.DirEntry, err error) error {
+			if path == abs {
+				// The workspace root is covered by the main bind mount above.
+				return nil
+			}
+			if err != nil {
+				// Skip unreadable or vanished entries instead of aborting the
+				// run. A directory that cannot be read is hidden whole so
+				// nothing inside it can leak into the container.
+				if d != nil && d.IsDir() {
+					dirRels = append(dirRels, relWithin(abs, path))
+				}
+				return nil
+			}
+			if d.IsDir() {
+				if !hiddenDirs[d.Name()] {
+					return nil
+				}
+				dirRels = append(dirRels, relWithin(abs, path))
+				return filepath.SkipDir
+			}
+			if isSecretEnvFile(d.Name()) {
+				envRels = append(envRels, relWithin(abs, path))
+			}
+			return nil
+		})
+		if err != nil {
+			return nil, err
+		}
+		for _, rel := range dirRels {
+			// A single-path -v mounts an empty anonymous volume over the host
+			// directory's contents.
+			args = append(args, "-v", fmt.Sprintf("/workspace/%s/%s", base, rel))
+		}
+		if len(envRels) > 0 && shadow == "" {
+			shadow, err = emptyShadowPath()
+			if err != nil {
+				return nil, err
+			}
+		}
+		for _, rel := range envRels {
+			// Read-only so the shared empty file cannot be written to through
+			// the shadow.
+			args = append(args, "-v", fmt.Sprintf("%s:/workspace/%s/%s:ro", shadow, base, rel))
+		}
 	}
 	// labels
 	b, _ := json.Marshal(o.Normalized)
@@ -179,6 +233,58 @@ func (o Options) BuildRunArgs() ([]string, error) {
 	}
 	args = append(args, image, "tail", "-f", "/dev/null")
 	return args, nil
+}
+
+// hiddenDirs are workspace directories covered by an empty anonymous volume so
+// the agent cannot read or modify the host's git state or dependencies.
+var hiddenDirs = map[string]bool{
+	".git":         true,
+	"node_modules": true,
+}
+
+// envFileExemptSuffixes name dotenv-style files that conventionally hold
+// non-secret templates, useful to keep visible inside the container.
+var envFileExemptSuffixes = []string{".example", ".sample", ".template"}
+
+// isSecretEnvFile reports whether name looks like a dotenv file that may hold
+// real values (.env, .env.local, .env.production, ...).
+func isSecretEnvFile(name string) bool {
+	if !strings.HasPrefix(name, ".env") {
+		return false
+	}
+	for _, suffix := range envFileExemptSuffixes {
+		if strings.HasSuffix(name, suffix) {
+			return false
+		}
+	}
+	return true
+}
+
+// emptyShadowPath returns the path of the empty file mounted over .env files to
+// hide their contents. It lives in claudex's cache dir so it is created once
+// and stays at a stable path: a reused container that is started again later
+// needs its bind sources to still exist.
+func emptyShadowPath() (string, error) {
+	dir, err := os.UserCacheDir()
+	if err != nil {
+		dir = os.TempDir()
+	}
+	dir = filepath.Join(dir, "claudex")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", err
+	}
+	path := filepath.Join(dir, "empty")
+	// Always rewrite so the shadow is guaranteed empty.
+	if err := os.WriteFile(path, nil, 0o644); err != nil {
+		return "", err
+	}
+	return path, nil
+}
+
+// relWithin returns path relative to root. filepath.WalkDir only reports root
+// and its descendants, so trimming the rooted prefix cannot fail.
+func relWithin(root, path string) string {
+	return strings.TrimPrefix(path, root+string(filepath.Separator))
 }
 
 // Run orchestrates the container lifecycle (ensure image, reuse or create, attach shell).
