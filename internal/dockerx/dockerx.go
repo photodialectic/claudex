@@ -284,11 +284,14 @@ func (CLI) ExtractVolumeFrom(image, volume string, src io.Reader) error {
 
 func (CLI) Start(name string) error { return (&CLI{}).Run("start", name) }
 
+// Remove removes a container. Its anonymous volumes (used to shadow .git and
+// node_modules out of the container) are removed with it so they do not
+// dangle; named volumes are always kept.
 func (CLI) Remove(name string, force bool) error {
 	if force {
-		return (&CLI{}).Run("rm", "-f", name)
+		return (&CLI{}).Run("rm", "-f", "-v", name)
 	}
-	return (&CLI{}).Run("rm", name)
+	return (&CLI{}).Run("rm", "-v", name)
 }
 
 func (CLI) ImageExists(tag string) (bool, error) {

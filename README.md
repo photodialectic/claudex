@@ -78,6 +78,8 @@ claudex [OPTIONS] [DIR1 DIR2 ...]
 **Behavior:**
 - Mounts each `DIR` at `/workspace/<basename(DIR)>` inside container
 - If no directories provided, mounts current directory contents at `/workspace/<name>`
+- Shadows `.env*` files (except `.env.example`, `.env.sample`, and `.env.template`) with an empty read-only file so host secrets stay out of the container; the shared empty file lives in the user cache dir (`~/.cache/claudex` on Linux)
+- Hides `.git` and `node_modules` directories behind empty volumes so the agent works from a clean tree and cannot touch host git state
 - Auto-initializes local Git repository at `/workspace` for change tracking
 - Applies firewall to restrict network access
 - Provides `claude-code`, `codex`, and `gemini-cli` tools
@@ -90,6 +92,11 @@ claudex --host-network app/          # Enable host networking
 claudex --name myproject app/        # Custom container name
 claudex --parallel --replace app/    # Force new container
 ```
+
+> Note: shadow mounts for `.env*`, `.git`, and `node_modules` are set when the
+> container is created. Re-running `claudex` reuses an existing container
+> as-is, so run `claudex --replace` to pick the shadowing up for containers
+> created by older versions.
 
 ### Custom Docker Networks
 
