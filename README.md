@@ -269,7 +269,7 @@ the binary at build time). To add support for a new agent, add an entry:
 ```yaml
   - name: example
     env_vars:
-      - EXAMPLE_API_KEY
+      - EXAMPLE_API_KEY   # host: export CLAUDEX_EXAMPLE_API_KEY=...
     install:
       - npm install -g example-agent
     mounts:
@@ -282,7 +282,7 @@ the binary at build time). To add support for a new agent, add an entry:
 Fields:
 
 - `name` — unique harness key, also used for `claudex harness push <name>`.
-- `env_vars` — environment variables forwarded from the host into the session. Host env vars should be prefixed with `CLAUDEX_` to avoid accidental leakage of secrets.
+- `env_vars` — environment variables forwarded from the host into the session. Entries here are the container-side names (left unprefixed); on the host, set the `CLAUDEX_`-prefixed variant (e.g. `CLAUDEX_EXAMPLE_API_KEY`) so secrets never collide with unrelated host globals. A bare `EXAMPLE_API_KEY` on the host is ignored with a warning.
 - `install` — one or more shell commands; each becomes its own generated `RUN`
   layer in the image and can be refreshed independently with
   `claudex harness update <name>`.

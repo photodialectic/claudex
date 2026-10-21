@@ -138,6 +138,13 @@ func ByName(name string) (Harness, bool) {
 	return Harness{}, false
 }
 
+// EnvPrefix is the host-side namespace for forwarded env vars. Hosts must set
+// "CLAUDEX_" + var (e.g. CLAUDEX_OPENAI_API_KEY) so secrets and harness config
+// never collide with unrelated host globals; the container-side name stays
+// unprefixed. Also used for claudex's own settings (CLAUDEX_NAME_SALT and
+// friends), so avoid listing those names in env_vars.
+const EnvPrefix = "CLAUDEX_"
+
 // EnvVars returns the deduplicated union of every harness's env vars.
 func EnvVars() []string {
 	seen := map[string]bool{}

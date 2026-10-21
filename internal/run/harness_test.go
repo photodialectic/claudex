@@ -2,8 +2,10 @@ package run
 
 import (
 	"bytes"
+	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/photodialectic/claudex/internal/dockerx"
@@ -26,17 +28,47 @@ func TestConfigMountArgsCoversAllVolumes(t *testing.T) {
 func TestConfigEnvArgsOnlySetVars(t *testing.T) {
 	for _, k := range harness.EnvVars() {
 		os.Unsetenv(k)
+		os.Unsetenv(harness.EnvPrefix + k)
 	}
 	t.Setenv("CLAUDEX_OPENAI_API_KEY", "sk-test")
 	injected := configEnvArgs()
 	if !contains(injected, "-e") || !contains(injected, "OPENAI_API_KEY=sk-test") {
 		t.Fatalf("expected -e OPENAI_API_KEY, got %v", injected)
 	}
+	if contains(injected, harness.EnvPrefix+"OPENAI_API_KEY") {
+		t.Fatalf("namespaced var must not leak into the container: %v", injected)
+	}
 	if len(injected) != 2 {
 		t.Fatalf("expected exactly one -e pair, got %v", injected)
 	}
 	if contains(injected, "GEMINI_API_KEY") {
 		t.Fatalf("did not expect unset GEMINI_API_KEY, got %v", injected)
+	}
+}
+
+func TestConfigEnvArgsWarnsOnUnnamespacedVar(t *testing.T) {
+	for _, k := range harness.EnvVars() {
+		os.Unsetenv(k)
+		os.Unsetenv(harness.EnvPrefix + k)
+	}
+	t.Setenv("OPENAI_API_KEY", "sk-legacy")
+	var warn bytes.Buffer
+	oldStderr := os.Stderr
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stderr = w
+	injected := configEnvArgs()
+	os.Stderr = oldStderr
+	w.Close()
+	_, _ = io.Copy(&warn, r)
+
+	if len(injected) != 0 {
+		t.Fatalf("unnamespaced var must not be forwarded, got %v", injected)
+	}
+	if !strings.Contains(warn.String(), "CLAUDEX_OPENAI_API_KEY") {
+		t.Fatalf("expected migration warning on stderr, got %q", warn.String())
 	}
 }
 

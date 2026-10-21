@@ -488,14 +488,19 @@ func configMountArgs(options ...Options) []string {
 }
 
 // configEnvArgs returns the -e arguments for every forwarded env var that is set.
+// Hosts provide values under harness.EnvPrefix; the container sees the bare name.
 func configEnvArgs() []string {
 	var args []string
 	for _, k := range harness.EnvVars() {
-		namespaced := "CLAUDEX_" + k
-		if os.Getenv(namespaced) != "" {
-			envKV := fmt.Sprintf("%s=%s", k, os.Getenv(namespaced))
-			args = append(args, "-e", envKV)
+		namespaced := harness.EnvPrefix + k
+		value := os.Getenv(namespaced)
+		if value == "" {
+			if os.Getenv(k) != "" {
+				fmt.Fprintf(os.Stderr, "warning: %s is set but ignored; export %s%s instead\n", k, harness.EnvPrefix, k)
+			}
+			continue
 		}
+		args = append(args, "-e", fmt.Sprintf("%s=%s", k, value))
 	}
 	return args
 }
