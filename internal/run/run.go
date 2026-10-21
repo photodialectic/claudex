@@ -491,8 +491,10 @@ func configMountArgs(options ...Options) []string {
 func configEnvArgs() []string {
 	var args []string
 	for _, k := range harness.EnvVars() {
-		if os.Getenv(k) != "" {
-			args = append(args, "-e", k)
+		namespaced := "CLAUDEX_" + k
+		if os.Getenv(namespaced) != "" {
+			envKV := fmt.Sprintf("%s=%s", k, os.Getenv(namespaced))
+			args = append(args, "-e", envKV)
 		}
 	}
 	return args

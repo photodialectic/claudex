@@ -282,7 +282,7 @@ the binary at build time). To add support for a new agent, add an entry:
 Fields:
 
 - `name` — unique harness key, also used for `claudex harness push <name>`.
-- `env_vars` — environment variables forwarded from the host into the session.
+- `env_vars` — environment variables forwarded from the host into the session. Host env vars should be prefixed with `CLAUDEX_` to avoid accidental leakage of secrets.
 - `install` — one or more shell commands; each becomes its own generated `RUN`
   layer in the image and can be refreshed independently with
   `claudex harness update <name>`.

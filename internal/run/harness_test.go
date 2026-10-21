@@ -27,9 +27,9 @@ func TestConfigEnvArgsOnlySetVars(t *testing.T) {
 	for _, k := range harness.EnvVars() {
 		os.Unsetenv(k)
 	}
-	t.Setenv("OPENAI_API_KEY", "sk-test")
+	t.Setenv("CLAUDEX_OPENAI_API_KEY", "sk-test")
 	injected := configEnvArgs()
-	if !contains(injected, "-e") || !contains(injected, "OPENAI_API_KEY") {
+	if !contains(injected, "-e") || !contains(injected, "OPENAI_API_KEY=sk-test") {
 		t.Fatalf("expected -e OPENAI_API_KEY, got %v", injected)
 	}
 	if len(injected) != 2 {
